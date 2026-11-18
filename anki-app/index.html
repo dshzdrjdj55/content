@@ -1,0 +1,863 @@
+<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style></head><body>
+<title>Nhớ Lâu</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@500;600;700&family=Inter:wght@400;500;600&display=swap">
+<style>
+/* Layout: AnkiWeb-like single column (max 720px), grey top bar, flashcard surface, fixed answer bar / tab bar at the bottom */
+:root{
+  --bg:#ffffff; --nav:#eceef0; --surface:#f8f7f4; --fg:#1c2024; --muted:#68717a; --line:#d6dbe0;
+  --accent:#0b5ed7; --accent-strong:#0a53be; --accent-fg:#ffffff; --accent-ring:#8fb8f5;
+  --pill-bg:#e3ebfb; --pill-fg:#2c4d9e;
+  --new:#1747d6; --learn:#b8232a; --rev:#1b8637;
+  --danger:#c62f2f; --overlay:rgba(20,24,28,.45); --shadow:0 8px 28px rgba(20,30,50,.16);
+  --f-display:"Be Vietnam Pro","Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-body:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --card-size:1.55rem;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#14171a; --nav:#1f2327; --surface:#1c2024; --fg:#e7eaed; --muted:#9aa3ac; --line:#323940;
+  --accent:#3d86f0; --accent-strong:#5b98f2; --accent-fg:#ffffff; --accent-ring:#2c5ea8;
+  --pill-bg:#22314d; --pill-fg:#a9c3f6; --new:#7fa3ff; --learn:#ff7f7f; --rev:#5fcf7b;
+  --danger:#ff6b6b; --overlay:rgba(0,0,0,.6); --shadow:0 8px 28px rgba(0,0,0,.5); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#14171a; --nav:#1f2327; --surface:#1c2024; --fg:#e7eaed; --muted:#9aa3ac; --line:#323940;
+  --accent:#3d86f0; --accent-strong:#5b98f2; --accent-fg:#ffffff; --accent-ring:#2c5ea8;
+  --pill-bg:#22314d; --pill-fg:#a9c3f6; --new:#7fa3ff; --learn:#ff7f7f; --rev:#5fcf7b;
+  --danger:#ff6b6b; --overlay:rgba(0,0,0,.6); --shadow:0 8px 28px rgba(0,0,0,.5); color-scheme:dark}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:16px;line-height:1.5;-webkit-text-size-adjust:100%}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--accent-ring);outline-offset:2px}
+.gut{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:720px;margin:0 auto}
+
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:30;background:var(--nav)}
+header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--nav);border-bottom:1px solid var(--line)}
+header.top .wrap{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-block:10px}
+.brand{display:flex;align-items:center;gap:10px;font-family:var(--f-display);font-weight:600;font-size:1.25rem;background:none;border:0;padding:0;cursor:pointer}
+.brand svg{width:34px;height:34px}
+.menu-btn{width:52px;height:40px;border:1px solid var(--line);border-radius:8px;background:transparent;display:grid;place-items:center;cursor:pointer}
+.menu-btn span{display:block;width:24px;height:2px;background:var(--fg);box-shadow:0 -7px 0 var(--fg),0 7px 0 var(--fg)}
+.menu{position:absolute;right:max(16px,env(safe-area-inset-right,0px));top:calc(100% + 6px);background:var(--bg);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);min-width:240px;padding:6px;display:flex;flex-direction:column}
+.menu button{background:none;border:0;text-align:left;padding:10px 12px;border-radius:6px;cursor:pointer}
+.menu button:hover{background:var(--nav)}
+.menu .sync{font-size:.8rem;color:var(--muted);padding:8px 12px;border-top:1px solid var(--line);margin-top:4px}
+
+main{padding-block:14px 120px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:40px;padding:6px 16px;border-radius:8px;border:1px solid var(--accent);background:transparent;color:var(--accent);cursor:pointer;font-weight:500;white-space:nowrap}
+.btn:hover{background:var(--pill-bg)}
+.btn.solid{background:var(--accent);color:var(--accent-fg)}
+.btn.solid:hover{background:var(--accent-strong)}
+.btn.sm{min-height:34px;padding:4px 12px;font-size:.95rem}
+.btn.danger{border-color:var(--danger);color:var(--danger)}
+.btn.ghost{border-color:var(--line);color:var(--fg)}
+.btn:disabled{opacity:.45;cursor:default}
+
+.counts{font-variant-numeric:tabular-nums;font-size:1.35rem;white-space:nowrap}
+.counts .n{color:var(--new)}.counts .l{color:var(--learn)}.counts .r{color:var(--rev)}
+.counts .plus{color:var(--muted);font-size:.85rem;margin:0 3px}
+.counts .cur{text-decoration:underline;text-underline-offset:3px}
+
+/* deck list */
+.h1{font-family:var(--f-display);font-weight:700;font-size:1.5rem;margin:6px 0 4px;text-wrap:balance}
+.sub{color:var(--muted);margin:0 0 14px}
+.decks{border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.decks .head,.deck{display:grid;grid-template-columns:1fr repeat(3,46px) 40px;align-items:center;gap:4px}
+.decks .head{background:var(--nav);font-size:.75rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:8px 8px 8px 14px}
+.decks .head span{text-align:center}
+.deck{border-top:1px solid var(--line);padding:4px 8px 4px 14px}
+.deck .name{background:none;border:0;text-align:left;padding:10px 0;cursor:pointer;font-weight:600;font-size:1.05rem;min-width:0;overflow-wrap:anywhere;color:var(--accent)}
+.deck .num{text-align:center;font-variant-numeric:tabular-nums;font-weight:600}
+.deck .num.zero{color:var(--muted);opacity:.5;font-weight:400}
+.gear{width:36px;height:36px;border:0;background:none;border-radius:6px;cursor:pointer;color:var(--muted);display:grid;place-items:center}
+.gear:hover{background:var(--nav)}
+.row-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+.empty{border:1px dashed var(--line);border-radius:12px;padding:28px 20px;text-align:center}
+.empty p{color:var(--muted);max-width:44ch;margin:8px auto 18px}
+
+/* study */
+.study-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.study-bar .tools{display:flex;gap:8px;flex-wrap:wrap}
+.card{background:var(--surface);border-radius:6px;padding:40px clamp(18px,5vw,40px) 44px;min-height:280px}
+.card .pill{display:table;margin:0 auto 18px;background:var(--pill-bg);color:var(--pill-fg);border-radius:999px;padding:4px 18px;font-size:calc(var(--card-size)*.68)}
+.card .q{font-family:var(--f-display);font-weight:700;font-size:var(--card-size);line-height:1.5;text-align:center;white-space:pre-wrap;overflow-wrap:anywhere;text-wrap:balance;margin:0}
+.card hr{border:0;border-top:1px solid var(--line);margin:28px 0}
+.card .a{font-size:calc(var(--card-size)*.82);line-height:1.75;white-space:pre-wrap;overflow-wrap:anywhere;margin:0}
+.answer-bar{position:fixed;left:0;right:0;bottom:0;z-index:15;background:var(--bg);border-top:1px solid var(--line);padding-bottom:calc(10px + env(safe-area-inset-bottom,0px));padding-top:8px}
+.answer-bar .wrap{display:flex;justify-content:center}
+.ease{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;width:100%;max-width:520px}
+.ease div{display:flex;flex-direction:column;align-items:center;gap:2px}
+.ease small{color:var(--muted);font-size:.85rem;font-variant-numeric:tabular-nums}
+.ease .btn{width:100%;padding:6px 4px;font-size:1.05rem}
+.ease .again{background:var(--learn);border-color:var(--learn);color:#fff}
+.ease .good{background:var(--rev);border-color:var(--rev);color:#fff}
+.show-btn{min-width:200px;font-size:1.1rem;min-height:48px;box-shadow:0 0 0 4px var(--accent-ring)}
+.done{text-align:center;padding:40px 12px}
+.done h2{font-family:var(--f-display);font-size:1.4rem;margin:0 0 8px}
+.done p{color:var(--muted);margin:0 auto 18px;max-width:44ch}
+
+/* forms */
+.form{display:grid;gap:14px}
+.field{display:grid;gap:6px;min-width:0}
+.field label{font-weight:600;font-size:.92rem}
+.field .hint{color:var(--muted);font-size:.82rem}
+.input,select.input,textarea.input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+textarea.input{min-height:110px;resize:vertical;line-height:1.5}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px}
+.seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;width:fit-content;margin-bottom:14px}
+.seg button{border:0;background:none;padding:8px 16px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-fg)}
+details.adv{border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+details.adv summary{cursor:pointer;font-weight:600}
+details.adv .grid2{margin-top:12px}
+
+/* browse */
+.filters{display:grid;grid-template-columns:1fr minmax(120px,190px);gap:10px;margin-bottom:12px}
+.list{border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.item{display:grid;grid-template-columns:1fr auto;gap:4px 12px;padding:12px 14px;border-top:1px solid var(--line);background:none;border-left:0;border-right:0;border-bottom:0;width:100%;text-align:left;cursor:pointer}
+.item:first-child{border-top:0}
+.item:hover{background:var(--nav)}
+.item .f{font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .meta{grid-column:1/-1;color:var(--muted);font-size:.82rem;display:flex;gap:10px;flex-wrap:wrap}
+.state{font-size:.75rem;padding:2px 8px;border-radius:999px;font-weight:600;align-self:start}
+.state.s0{background:var(--pill-bg);color:var(--new)}
+.state.s1,.state.s3{background:color-mix(in srgb,var(--learn) 14%,transparent);color:var(--learn)}
+.state.s2{background:color-mix(in srgb,var(--rev) 14%,transparent);color:var(--rev)}
+.state.due{outline:1.5px solid currentColor}
+.more{display:block;margin:12px auto 0}
+
+/* tab bar */
+nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:15;background:var(--nav);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px)}
+nav.tabs .wrap{display:grid;grid-template-columns:repeat(3,1fr)}
+nav.tabs button{background:none;border:0;padding:8px 4px 10px;display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;color:var(--muted);font-size:.85rem}
+nav.tabs button[aria-current="page"]{color:var(--accent);font-weight:600}
+nav.tabs svg{width:26px;height:26px}
+.tabnum{font-size:.7rem;font-weight:700;border:2px solid currentColor;border-radius:6px;min-width:26px;height:26px;display:grid;place-items:center;padding:0 3px;font-variant-numeric:tabular-nums}
+
+/* modal + toast */
+.overlay{position:fixed;inset:0;z-index:50;background:var(--overlay);display:flex;align-items:flex-end;justify-content:center}
+@media (min-width:600px){.overlay{align-items:center}}
+.sheet{background:var(--bg);width:100%;max-width:560px;max-height:92%;overflow:auto;border-radius:14px 14px 0 0;padding:20px max(18px,env(safe-area-inset-right,0px)) calc(20px + env(safe-area-inset-bottom,0px)) max(18px,env(safe-area-inset-left,0px));box-shadow:var(--shadow)}
+@media (min-width:600px){.sheet{border-radius:14px}}
+.sheet h3{font-family:var(--f-display);margin:0 0 14px;font-size:1.2rem}
+.sheet .foot{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;margin-top:18px}
+.sheet .foot .spacer{flex:1}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(92px + env(safe-area-inset-bottom,0px));z-index:60;background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:8px;font-weight:500;box-shadow:var(--shadow);max-width:calc(100% - 32px)}
+.muted{color:var(--muted)}
+.note{font-size:.85rem;color:var(--muted);margin-top:10px}
+@media (prefers-reduced-motion:no-preference){.card{animation:pop .18s ease-out}@keyframes pop{from{transform:translateY(4px);opacity:.6}to{transform:none;opacity:1}}}
+</style>
+
+<header class="top">
+  <div class="wrap gut" style="position:relative">
+    <button class="brand" id="brand" type="button" aria-label="Về danh sách bộ thẻ">
+      <span>Nhớ Lâu</span>
+      <svg viewBox="0 0 40 40" aria-hidden="true"><rect x="9" y="6" width="20" height="26" rx="4" transform="rotate(-12 19 19)" fill="none" stroke="#1aa3e8" stroke-width="3"/><rect x="13" y="9" width="20" height="26" rx="4" transform="rotate(8 23 22)" fill="#1aa3e8" fill-opacity=".18" stroke="#1aa3e8" stroke-width="3"/></svg>
+    </button>
+    <button class="menu-btn" id="menuBtn" type="button" aria-label="Mở menu" aria-expanded="false"><span></span></button>
+    <div class="menu" id="menu" hidden>
+      <button type="button" data-go="decks">Bộ thẻ</button>
+      <button type="button" data-go="add">Thêm thẻ mới</button>
+      <button type="button" data-go="browse">Tất cả các thẻ</button>
+      <button type="button" id="mExport">Xuất dữ liệu (JSON)</button>
+      <button type="button" id="mImport">Nhập dữ liệu (JSON / Anki .txt)</button>
+      <button type="button" id="mHelp">Cách tính lịch ôn</button>
+      <div class="sync" id="syncNote">Đang kết nối…</div>
+    </div>
+  </div>
+</header>
+<input type="file" id="fileIn" accept=".json,.txt,.tsv,.csv,application/json,text/plain" hidden>
+
+<main class="gut"><div class="wrap" id="view"></div></main>
+<div id="bottom"></div>
+<div id="modalRoot"></div>
+<div id="toastRoot"></div>
+
+<script>
+/* ============ helpers ============ */
+const $ = (s, el = document) => el.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+const clone = o => JSON.parse(JSON.stringify(o));
+const MIN = 60e3, DAY = 864e5, ROLLOVER_H = 4, LEARN_AHEAD = 20 * MIN;
+
+/* Anki-like default options */
+const DEF = {
+  newPerDay: 20, revPerDay: 200,
+  learnSteps: [1, 10], gradIvl: 1, easyIvl: 4,
+  relearnSteps: [10], lapseMult: 0, minIvl: 1,
+  startEase: 2.5, easyBonus: 1.3, hardMult: 1.2, ivlMod: 1, maxIvl: 36500
+};
+
+/* A "day" starts at 4:00 local time, like Anki */
+function dayOf(ts) {
+  const d = new Date(ts - ROLLOVER_H * 3600e3);
+  return Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / DAY);
+}
+function dayStart(day) { const d = new Date(day * DAY); return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), ROLLOVER_H).getTime(); }
+const today = () => dayOf(Date.now());
+function fmtDate(day) { const d = new Date(day * DAY); return `${d.getUTCDate()}/${d.getUTCMonth() + 1}/${d.getUTCFullYear()}`; }
+const trim1 = x => String(Math.round(x * 10) / 10);
+function fmtDays(d) { if (d < 30) return Math.max(1, Math.round(d)) + 'd'; if (d < 365) return trim1(d / 30) + 'mo'; return trim1(d / 365) + 'y'; }
+function fmtMin(m) { if (m < 1) return '<1m'; if (m < 60) return Math.round(m) + 'm'; if (m < 1440) return trim1(m / 60) + 'h'; return fmtDays(m / 1440); }
+
+/* ============ state ============ */
+const S = { decks: {}, cards: {}, view: 'decks', deckId: null, cur: null, showAns: false, undo: null,
+  browseQ: '', browseDeck: 'all', browseLimit: 60, addDeck: null, addTag: '', addMode: 'one', timer: null };
+
+function conf(deck) { return { ...DEF, ...(deck?.conf || {}) }; }
+function cardsOf(deckId) { return Object.values(S.cards).filter(c => c.deck === deckId); }
+function deckToday(d) {
+  const t = today();
+  if (!d.today || d.today.day !== t) d.today = { day: t, newDone: 0, revDone: 0, reps: 0, newExtra: 0 };
+  return d.today;
+}
+function deckList() { return Object.values(S.decks).sort((a, b) => a.name.localeCompare(b.name, 'vi')); }
+
+/* ============ storage: Claude account (db) with browser fallback ============ */
+const LS_KEY = 'nholau.v1';
+const Store = {
+  remote: null, base: null, chains: {}, mode: 'local',
+  loadLocal() {
+    try { const j = JSON.parse(localStorage.getItem(LS_KEY) || 'null'); if (j) { S.decks = j.decks || {}; S.cards = j.cards || {}; } } catch (e) {}
+  },
+  saveLocal() { try { localStorage.setItem(LS_KEY, JSON.stringify({ decks: S.decks, cards: S.cards })); } catch (e) {} },
+  async connect() {
+    if (!window.claude || typeof window.claude.use !== 'function') { setSync(); return; }
+    try {
+      const [db, user] = await Promise.all([window.claude.use('db'), window.claude.use('user')]);
+      if (!db || !user) { setSync(); return; }
+      const id = await user.id();
+      if (!id) { setSync(); return; }
+      this.base = 'data/users/' + id;
+      setSync('Đang tải dữ liệu từ tài khoản…');
+      let timedOut = false;
+      const timer = setTimeout(() => { timedOut = true; setSync('Không tải được dữ liệu tài khoản. Đang dùng bản lưu trên máy.'); }, 10000);
+      const [ds, cs] = await Promise.all([db.collection(this.base + '/decks').get(), db.collection(this.base + '/cards').get()]);
+      clearTimeout(timer);
+      if (timedOut) return;
+      this.remote = db; this.mode = 'remote';
+      const decks = {}, cards = {};
+      ds.docs.forEach(d => { if (d.exists) decks[d.id] = clone(d.data()); });
+      cs.docs.forEach(d => { if (d.exists) cards[d.id] = clone(d.data()); });
+      if (!Object.keys(decks).length && Object.keys(S.decks).length) {
+        Object.values(S.decks).forEach(d => this.write('decks', d));
+        Object.values(S.cards).forEach(c => this.write('cards', c));
+      } else { S.decks = decks; S.cards = cards; }
+      this.saveLocal(); setSync(); render();
+    } catch (e) { console.warn(e); setSync('Không kết nối được tài khoản. Đang dùng bản lưu trên máy.'); }
+  },
+  write(kind, obj) {
+    this.saveLocal();
+    if (!this.remote) return;
+    const path = `${this.base}/${kind}/${obj.id}`, data = clone(obj);
+    this.chains[path] = (this.chains[path] || Promise.resolve())
+      .then(() => this.remote.doc(path).set(data))
+      .catch(e => { console.warn(e); toast('Chưa lưu được lên tài khoản, sẽ giữ trên máy.'); });
+  },
+  del(kind, id) {
+    this.saveLocal();
+    if (!this.remote) return;
+    const path = `${this.base}/${kind}/${id}`;
+    this.chains[path] = (this.chains[path] || Promise.resolve()).then(() => this.remote.doc(path).delete()).catch(e => console.warn(e));
+  }
+};
+function setSync(msg) {
+  $('#syncNote').textContent = msg || (Store.mode === 'remote'
+    ? 'Đã đồng bộ với tài khoản Claude của bạn (riêng tư, dùng được trên mọi thiết bị).'
+    : 'Dữ liệu lưu trên trình duyệt này. Hãy xuất JSON để sao lưu.');
+}
+
+/* ============ scheduler (Anki SM-2 style) ============
+   type: 0 new · 1 learning · 2 review · 3 relearning
+   learning cards use `due` (timestamp); review cards use `dueDay` (day number) */
+function schedule(c0, ease, cf, now) {
+  const c = { ...c0 }, t = dayOf(now);
+  c.reps = (c.reps || 0) + 1; c.mod = now;
+  if (c.type === 0) { c.type = 1; c.left = 0; c.ease = cf.startEase; c.ivl = 0; }
+
+  if (c.type === 1 || c.type === 3) {
+    const steps = c.type === 1 ? cf.learnSteps : cf.relearnSteps;
+    const toReview = ivl => { c.type = 2; c.ivl = Math.min(cf.maxIvl, Math.max(1, Math.round(ivl))); c.dueDay = t + c.ivl; c.left = 0; delete c.due; };
+    const gradGood = () => c.type === 1 ? cf.gradIvl : Math.max(cf.minIvl, c.ivl || 1);
+    const gradEasy = () => c.type === 1 ? cf.easyIvl : Math.max(cf.minIvl, c.ivl || 1) + 1;
+    if (!steps.length) { toReview(ease === 4 ? gradEasy() : gradGood()); return c; }
+    c.left = Math.min(c.left || 0, steps.length - 1);
+    if (ease === 1) { c.left = 0; c.due = now + steps[0] * MIN; }
+    else if (ease === 2) {
+      const m = c.left === 0 ? (steps.length > 1 ? (steps[0] + steps[1]) / 2 : Math.min(steps[0] * 1.5, steps[0] + 1440)) : steps[c.left];
+      c.due = now + m * MIN;
+    } else if (ease === 3) {
+      c.left += 1;
+      if (c.left >= steps.length) toReview(gradGood()); else c.due = now + steps[c.left] * MIN;
+    } else toReview(gradEasy());
+    return c;
+  }
+
+  // review card
+  const ivl = Math.max(1, c.ivl || 1), late = Math.max(0, t - (c.dueDay ?? t));
+  if (ease === 1) {
+    c.lapses = (c.lapses || 0) + 1;
+    c.ease = Math.max(1.3, c.ease - 0.2);
+    c.ivl = Math.max(cf.minIvl, Math.round(ivl * cf.lapseMult));
+    if (cf.relearnSteps.length) { c.type = 3; c.left = 0; c.due = now + cf.relearnSteps[0] * MIN; }
+    else c.dueDay = t + c.ivl;
+    return c;
+  }
+  const hard = Math.max(ivl + 1, Math.round(ivl * cf.hardMult * cf.ivlMod));
+  const good = Math.max(hard + 1, Math.round((ivl + late / 2) * c.ease * cf.ivlMod));
+  const easy = Math.max(good + 1, Math.round((ivl + late) * c.ease * cf.easyBonus * cf.ivlMod));
+  if (ease === 2) c.ease = Math.max(1.3, c.ease - 0.15);
+  if (ease === 4) c.ease = c.ease + 0.15;
+  c.ivl = Math.min(cf.maxIvl, ease === 2 ? hard : ease === 3 ? good : easy);
+  c.dueDay = t + c.ivl;
+  return c;
+}
+/* small random spread so cards learned together don't all return the same day */
+function fuzz(c) {
+  if (c.type !== 2 || c.ivl < 3) return c;
+  const r = Math.max(1, Math.round(c.ivl * 0.05));
+  const d = Math.floor(Math.random() * (2 * r + 1)) - r;
+  c.ivl = Math.max(2, c.ivl + d); c.dueDay += d;
+  return c;
+}
+function previewLabel(card, ease, cf) {
+  const now = Date.now(), n = schedule(card, ease, cf, now);
+  if (n.type === 2) return fmtDays(n.dueDay - dayOf(now));
+  return fmtMin((n.due - now) / MIN);
+}
+
+function counts(deck) {
+  const now = Date.now(), t = today(), cf = conf(deck), td = deckToday(deck);
+  let n = 0, l = 0, r = 0;
+  for (const c of cardsOf(deck.id)) {
+    if (c.type === 0) n++;
+    else if (c.type === 2) { if (c.dueDay <= t) r++; }
+    else if (c.due <= now + LEARN_AHEAD) l++;
+  }
+  return {
+    n: Math.max(0, Math.min(n, cf.newPerDay + (td.newExtra || 0) - td.newDone)),
+    l,
+    r: Math.max(0, Math.min(r, cf.revPerDay - td.revDone))
+  };
+}
+function nextCard(deck) {
+  const now = Date.now(), t = today(), cs = cardsOf(deck.id);
+  const learn = cs.filter(c => c.type === 1 || c.type === 3).sort((a, b) => a.due - b.due);
+  if (learn[0] && learn[0].due <= now) return learn[0];
+  const k = counts(deck);
+  if (k.r > 0) return cs.filter(c => c.type === 2 && c.dueDay <= t).sort((a, b) => (a.dueDay - b.dueDay) || (a.created - b.created))[0];
+  if (k.n > 0) return cs.filter(c => c.type === 0).sort((a, b) => a.created - b.created)[0];
+  if (learn[0] && learn[0].due <= now + LEARN_AHEAD) return learn[0];
+  return null;
+}
+function queueOf(card) { return card.type === 0 ? 'n' : card.type === 2 ? 'r' : 'l'; }
+
+/* ============ actions ============ */
+function answer(ease) {
+  const deck = S.decks[S.deckId], c = S.cards[S.cur];
+  if (!deck || !c || !S.showAns) return;
+  const td = deckToday(deck);
+  S.undo = { card: clone(c), today: clone(td), deckId: deck.id };
+  if (c.type === 0) td.newDone++; else if (c.type === 2) td.revDone++;
+  td.reps = (td.reps || 0) + 1;
+  const n = fuzz(schedule(c, ease, conf(deck), Date.now()));
+  S.cards[c.id] = n;
+  Store.write('cards', n); Store.write('decks', deck);
+  S.cur = null; S.showAns = false;
+  render();
+}
+function undo() {
+  const u = S.undo; if (!u) return;
+  const deck = S.decks[u.deckId]; if (!deck) return;
+  S.cards[u.card.id] = u.card; deck.today = u.today;
+  Store.write('cards', u.card); Store.write('decks', deck);
+  S.cur = u.card.id; S.showAns = false; S.undo = null;
+  toast('Đã hoàn tác'); render();
+}
+function makeCard(deck, front, back, tag) {
+  const now = Date.now();
+  return { id: newId(), deck, front: front.trim(), back: back.trim(), tag: (tag || '').trim(), type: 0, ivl: 0, ease: 0, reps: 0, lapses: 0, left: 0, created: now + Math.random(), mod: now };
+}
+function createDeck(name) {
+  const d = { id: newId(), name: name.trim() || 'Bộ thẻ mới', conf: {}, created: Date.now() };
+  S.decks[d.id] = d; Store.write('decks', d); return d;
+}
+
+/* ============ rendering ============ */
+function go(view, extra = {}) {
+  Object.assign(S, { view }, extra);
+  $('#menu').hidden = true; $('#menuBtn').setAttribute('aria-expanded', 'false');
+  render(); window.scrollTo(0, 0);
+}
+function render() {
+  clearTimeout(S.timer);
+  const v = S.view;
+  if (v === 'study' && !S.decks[S.deckId]) S.view = 'decks';
+  ({ decks: renderDecks, study: renderStudy, add: renderAdd, browse: renderBrowse }[S.view])();
+  renderBottom();
+}
+
+const ICON_GEAR = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>';
+
+function renderDecks() {
+  const decks = deckList();
+  let reps = 0, due = 0;
+  decks.forEach(d => { const t = deckToday(d); reps += t.reps || 0; const k = counts(d); due += k.n + k.l + k.r; });
+  const view = $('#view');
+  if (!decks.length) {
+    view.innerHTML = `
+      <h1 class="h1">Bộ thẻ</h1>
+      <div class="empty">
+        <strong>Chưa có bộ thẻ nào</strong>
+        <p>Tạo một bộ thẻ, thêm câu hỏi và câu trả lời. Ứng dụng sẽ tự xếp lịch ôn: thẻ bạn hay quên sẽ quay lại sớm, thẻ bạn nhớ tốt sẽ giãn ra vài ngày, vài tuần, rồi vài tháng.</p>
+        <div class="row-actions" style="justify-content:center">
+          <button class="btn solid" type="button" id="newDeck">Tạo bộ thẻ</button>
+          <button class="btn" type="button" id="sample">Dùng bộ thẻ mẫu (IELTS Speaking)</button>
+        </div>
+      </div>`;
+    $('#newDeck').onclick = deckDialog;
+    $('#sample').onclick = addSample;
+    return;
+  }
+  view.innerHTML = `
+    <h1 class="h1">Bộ thẻ</h1>
+    <p class="sub">Hôm nay đã ôn <strong>${reps}</strong> lượt · còn <strong>${due}</strong> thẻ cần học</p>
+    <div class="decks" role="table" aria-label="Danh sách bộ thẻ">
+      <div class="head" role="row"><span style="text-align:left">Tên</span><span title="Thẻ mới">Mới</span><span title="Đang học">Học</span><span title="Đến hạn ôn">Ôn</span><span></span></div>
+      ${decks.map(d => { const k = counts(d); return `
+        <div class="deck" role="row">
+          <button class="name" type="button" data-study="${d.id}">${esc(d.name)}</button>
+          <span class="num ${k.n ? '' : 'zero'}" style="color:${k.n ? 'var(--new)' : ''}">${k.n}</span>
+          <span class="num ${k.l ? '' : 'zero'}" style="color:${k.l ? 'var(--learn)' : ''}">${k.l}</span>
+          <span class="num ${k.r ? '' : 'zero'}" style="color:${k.r ? 'var(--rev)' : ''}">${k.r}</span>
+          <button class="gear" type="button" data-opt="${d.id}" aria-label="Tuỳ chọn bộ ${esc(d.name)}">${ICON_GEAR}</button>
+        </div>`; }).join('')}
+    </div>
+    <div class="row-actions">
+      <button class="btn" type="button" id="newDeck">+ Tạo bộ thẻ</button>
+      <button class="btn ghost" type="button" id="toAdd">Thêm thẻ</button>
+    </div>`;
+  view.querySelectorAll('[data-study]').forEach(b => b.onclick = () => go('study', { deckId: b.dataset.study, cur: null, showAns: false, undo: null }));
+  view.querySelectorAll('[data-opt]').forEach(b => b.onclick = () => limitsDialog(b.dataset.opt));
+  $('#newDeck').onclick = deckDialog;
+  $('#toAdd').onclick = () => go('add');
+}
+
+function renderStudy() {
+  const deck = S.decks[S.deckId];
+  let card = S.cur && S.cards[S.cur];
+  if (!card || card.deck !== deck.id) { card = nextCard(deck); S.cur = card ? card.id : null; S.showAns = false; }
+  const k = counts(deck);
+  const q = card ? queueOf(card) : '';
+  const view = $('#view');
+  const bar = `
+    <div class="study-bar">
+      <div class="tools">
+        <button class="btn sm" type="button" id="bEdit" ${card ? '' : 'disabled'}>Sửa</button>
+        <button class="btn sm" type="button" id="bLimits">Giới hạn</button>
+        <button class="btn sm" type="button" id="bPlus" aria-label="Phóng to chữ">+</button>
+        <button class="btn sm" type="button" id="bMinus" aria-label="Thu nhỏ chữ">−</button>
+        ${S.undo ? '<button class="btn sm ghost" type="button" id="bUndo">Hoàn tác</button>' : ''}
+      </div>
+      <div class="counts" aria-label="Mới ${k.n}, đang học ${k.l}, cần ôn ${k.r}">
+        <span class="n ${q === 'n' ? 'cur' : ''}">${k.n}</span><span class="plus">+</span><span class="l ${q === 'l' ? 'cur' : ''}">${k.l}</span><span class="plus">+</span><span class="r ${q === 'r' ? 'cur' : ''}">${k.r}</span>
+      </div>
+    </div>`;
+  if (!card) {
+    const learn = cardsOf(deck.id).filter(c => c.type === 1 || c.type === 3).sort((a, b) => a.due - b.due)[0];
+    const total = cardsOf(deck.id).length;
+    const newLeft = cardsOf(deck.id).filter(c => c.type === 0).length;
+    let msg;
+    if (!total) msg = 'Bộ này chưa có thẻ nào. Thêm thẻ để bắt đầu học.';
+    else if (learn) msg = `Còn thẻ đang học sẽ đến lại sau ${fmtMin((learn.due - Date.now()) / MIN)}. Trang sẽ tự hiện thẻ khi đến giờ.`;
+    else msg = 'Bạn đã học xong bộ thẻ này hôm nay. Hẹn gặp lại vào ngày mai!';
+    view.innerHTML = bar + `
+      <div class="card done">
+        <h2>${total ? 'Chúc mừng!' : 'Bộ thẻ trống'}</h2>
+        <p>${msg}</p>
+        <div class="row-actions" style="justify-content:center">
+          ${total ? '' : '<button class="btn solid" type="button" id="dAdd">Thêm thẻ</button>'}
+          ${newLeft ? `<button class="btn" type="button" id="dMore">Học thêm 10 thẻ mới hôm nay</button>` : ''}
+          <button class="btn ghost" type="button" id="dBack">Về danh sách bộ thẻ</button>
+        </div>
+      </div>`;
+    if ($('#dAdd')) $('#dAdd').onclick = () => go('add', { addDeck: deck.id });
+    if ($('#dMore')) $('#dMore').onclick = () => { deckToday(deck).newExtra = (deckToday(deck).newExtra || 0) + 10; Store.write('decks', deck); render(); };
+    $('#dBack').onclick = () => go('decks');
+    if (learn) S.timer = setTimeout(render, Math.max(1000, learn.due - LEARN_AHEAD - Date.now() + 500));
+  } else {
+    view.innerHTML = bar + `
+      <article class="card" aria-live="polite">
+        ${card.tag ? `<span class="pill">${esc(card.tag)}</span>` : ''}
+        <p class="q">${esc(card.front)}</p>
+        ${S.showAns ? `<hr id="answer"><p class="a">${esc(card.back)}</p>` : ''}
+      </article>`;
+  }
+  $('#bLimits').onclick = () => limitsDialog(deck.id);
+  $('#bPlus').onclick = () => zoom(1);
+  $('#bMinus').onclick = () => zoom(-1);
+  if ($('#bUndo')) $('#bUndo').onclick = undo;
+  if (card) $('#bEdit').onclick = () => editDialog(card.id);
+}
+
+function renderBottom() {
+  const root = $('#bottom');
+  if (S.view === 'study') {
+    const deck = S.decks[S.deckId], card = S.cur && S.cards[S.cur];
+    if (!card) { root.innerHTML = ''; return; }
+    if (!S.showAns) {
+      root.innerHTML = `<div class="answer-bar gut"><div class="wrap"><button class="btn solid show-btn" type="button" id="showAns">Hiện đáp án</button></div></div>`;
+      $('#showAns').onclick = () => { S.showAns = true; render(); };
+    } else {
+      const cf = conf(deck);
+      const names = ['Again', 'Hard', 'Good', 'Easy'];
+      root.innerHTML = `<div class="answer-bar gut"><div class="wrap"><div class="ease">
+        ${names.map((n, i) => `<div><small>${previewLabel(card, i + 1, cf)}</small><button class="btn solid ${i === 0 ? 'again' : i === 2 ? 'good' : ''}" type="button" data-ease="${i + 1}" title="Phím ${i + 1}">${n}</button></div>`).join('')}
+      </div></div></div>`;
+      root.querySelectorAll('[data-ease]').forEach(b => b.onclick = () => answer(+b.dataset.ease));
+    }
+    return;
+  }
+  const total = Object.keys(S.cards).length;
+  const tab = (id, label, icon) => `<button type="button" data-go="${id}" ${S.view === id ? 'aria-current="page"' : ''}>${icon}<span>${label}</span></button>`;
+  root.innerHTML = `<nav class="tabs gut" aria-label="Điều hướng"><div class="wrap">
+    ${tab('decks', 'Bộ thẻ', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="7" width="14" height="14" rx="2"/><path d="M7 3h12a2 2 0 0 1 2 2v12"/></svg>')}
+    ${tab('add', 'Thẻ mới', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>')}
+    ${tab('browse', 'Tất cả các thẻ', `<span class="tabnum">${total > 999 ? '999+' : total}</span>`)}
+  </div></nav>`;
+  root.querySelectorAll('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
+}
+
+function deckOptions(sel) {
+  return deckList().map(d => `<option value="${d.id}" ${d.id === sel ? 'selected' : ''}>${esc(d.name)}</option>`).join('');
+}
+
+function renderAdd() {
+  const decks = deckList();
+  const view = $('#view');
+  if (!decks.length) {
+    view.innerHTML = `<h1 class="h1">Thêm thẻ</h1><div class="empty"><strong>Cần tạo bộ thẻ trước</strong><p>Mỗi thẻ thuộc về một bộ thẻ, ví dụ "IELTS Speaking" hoặc "Từ vựng N3".</p><button class="btn solid" type="button" id="newDeck">Tạo bộ thẻ</button></div>`;
+    $('#newDeck').onclick = deckDialog; return;
+  }
+  if (!S.decks[S.addDeck]) S.addDeck = S.deckId && S.decks[S.deckId] ? S.deckId : decks[0].id;
+  view.innerHTML = `
+    <h1 class="h1">Thêm thẻ</h1>
+    <div class="seg" role="group" aria-label="Kiểu thêm">
+      <button type="button" data-mode="one" aria-pressed="${S.addMode === 'one'}">Từng thẻ</button>
+      <button type="button" data-mode="bulk" aria-pressed="${S.addMode === 'bulk'}">Nhập nhiều thẻ</button>
+    </div>
+    <form class="form" id="addForm" autocomplete="off">
+      <div class="grid2">
+        <div class="field"><label for="aDeck">Bộ thẻ</label><select class="input" id="aDeck">${deckOptions(S.addDeck)}</select></div>
+        <div class="field"><label for="aTag">Nhãn (tuỳ chọn)</label><input class="input" id="aTag" placeholder="VD: Part 2" value="${esc(S.addTag)}"></div>
+      </div>
+      ${S.addMode === 'one' ? `
+        <div class="field"><label for="aFront">Mặt trước (câu hỏi)</label><textarea class="input" id="aFront" required placeholder="VD: Describe a traditional product from your country and explain why it is popular."></textarea></div>
+        <div class="field"><label for="aBack">Mặt sau (đáp án)</label><textarea class="input" id="aBack" style="min-height:180px" placeholder="Câu trả lời mẫu, giải nghĩa, ví dụ…"></textarea></div>
+        <div><button class="btn solid" type="submit">Thêm thẻ</button></div>
+      ` : `
+        <div class="field"><label for="aBulk">Mỗi dòng một thẻ: <code>mặt trước | mặt sau</code></label>
+          <textarea class="input" id="aBulk" style="min-height:220px" placeholder="ubiquitous | có mặt ở khắp nơi&#10;versatile | đa năng, dùng được nhiều cách&#10;Describe your hometown. | My hometown is…"></textarea>
+          <span class="hint">Cũng nhận dữ liệu xuất từ Anki dạng Tab (Notes in Plain Text). Viết &lt;br&gt; để xuống dòng trong thẻ.</span></div>
+        <div><button class="btn solid" type="submit">Nhập các thẻ</button> <span class="muted" id="bulkCount"></span></div>
+      `}
+    </form>`;
+  view.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => { S.addMode = b.dataset.mode; render(); });
+  $('#aDeck').onchange = e => S.addDeck = e.target.value;
+  $('#aTag').oninput = e => S.addTag = e.target.value;
+  if (S.addMode === 'bulk') {
+    const upd = () => { $('#bulkCount').textContent = parseBulk($('#aBulk').value).length + ' thẻ'; };
+    $('#aBulk').oninput = upd; upd();
+  }
+  $('#addForm').onsubmit = e => {
+    e.preventDefault();
+    const deck = $('#aDeck').value, tag = $('#aTag').value;
+    if (S.addMode === 'one') {
+      const f = $('#aFront').value, b = $('#aBack').value;
+      if (!f.trim()) { $('#aFront').focus(); toast('Mặt trước đang trống'); return; }
+      const c = makeCard(deck, f, b, tag); S.cards[c.id] = c; Store.write('cards', c);
+      $('#aFront').value = ''; $('#aBack').value = ''; $('#aFront').focus();
+      toast('Đã thêm thẻ vào ' + S.decks[deck].name); renderBottom();
+    } else {
+      const rows = parseBulk($('#aBulk').value);
+      if (!rows.length) { toast('Chưa có dòng nào hợp lệ'); return; }
+      rows.forEach(([f, b]) => { const c = makeCard(deck, f, b, tag); S.cards[c.id] = c; Store.write('cards', c); });
+      $('#aBulk').value = ''; $('#bulkCount').textContent = '';
+      toast(`Đã thêm ${rows.length} thẻ`); renderBottom();
+    }
+  };
+}
+function parseBulk(text) {
+  const br = s => s.replace(/<br\s*\/?>/gi, '\n').replace(/&nbsp;/g, ' ').trim();
+  return text.split(/\r?\n/).filter(l => l.trim() && !l.startsWith('#')).map(l => {
+    let parts = l.includes('\t') ? l.split('\t') : l.split('|');
+    if (parts.length < 2) return null;
+    const f = br(parts[0].replace(/^"|"$/g, '')), b = br(parts.slice(1).join(l.includes('\t') ? '\n' : '|').replace(/^"|"$/g, ''));
+    return f ? [f, b] : null;
+  }).filter(Boolean);
+}
+
+function stateLabel(c) {
+  const t = today();
+  if (c.type === 0) return ['Mới', 's0', false];
+  if (c.type === 1) return ['Đang học', 's1', c.due <= Date.now()];
+  if (c.type === 3) return ['Học lại', 's3', c.due <= Date.now()];
+  return [c.dueDay <= t ? 'Đến hạn' : 'Ôn ' + fmtDays(c.dueDay - t), 's2', c.dueDay <= t];
+}
+function renderBrowse() {
+  const view = $('#view');
+  const q = S.browseQ.trim().toLowerCase();
+  let list = Object.values(S.cards).filter(c => (S.browseDeck === 'all' || c.deck === S.browseDeck) &&
+    (!q || (c.front + ' ' + c.back + ' ' + c.tag).toLowerCase().includes(q)));
+  list.sort((a, b) => b.created - a.created);
+  const shown = list.slice(0, S.browseLimit);
+  view.innerHTML = `
+    <h1 class="h1">Tất cả các thẻ</h1>
+    <div class="filters">
+      <input class="input" id="bq" type="search" placeholder="Tìm trong thẻ…" value="${esc(S.browseQ)}" aria-label="Tìm thẻ">
+      <select class="input" id="bd" aria-label="Lọc theo bộ thẻ"><option value="all">Mọi bộ thẻ</option>${deckOptions(S.browseDeck)}</select>
+    </div>
+    <p class="sub">${list.length} thẻ</p>
+    ${shown.length ? `<div class="list">${shown.map(c => { const [lab, cls, due] = stateLabel(c); const d = S.decks[c.deck]; return `
+      <button class="item" type="button" data-edit="${c.id}">
+        <span class="f">${esc(c.front)}</span>
+        <span class="state ${cls} ${due ? 'due' : ''}">${lab}</span>
+        <span class="meta"><span>${esc(d ? d.name : '—')}</span>${c.tag ? `<span>${esc(c.tag)}</span>` : ''}${c.type === 2 ? `<span>ngày ôn: ${fmtDate(c.dueDay)}</span><span>độ dễ ${Math.round(c.ease * 100)}%</span>` : ''}${c.lapses ? `<span>quên ${c.lapses} lần</span>` : ''}</span>
+      </button>`; }).join('')}</div>
+      ${list.length > shown.length ? `<button class="btn ghost more" type="button" id="more">Xem thêm</button>` : ''}`
+    : `<div class="empty"><p>${Object.keys(S.cards).length ? 'Không có thẻ nào khớp.' : 'Chưa có thẻ nào.'}</p></div>`}`;
+  const bq = $('#bq');
+  bq.oninput = e => { S.browseQ = e.target.value; S.browseLimit = 60; const pos = e.target.selectionStart; render(); const n = $('#bq'); n.focus(); n.setSelectionRange(pos, pos); };
+  $('#bd').onchange = e => { S.browseDeck = e.target.value; render(); };
+  view.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => editDialog(b.dataset.edit));
+  if ($('#more')) $('#more').onclick = () => { S.browseLimit += 100; render(); };
+}
+
+/* ============ dialogs ============ */
+function modal(html, onMount) {
+  const root = $('#modalRoot');
+  root.innerHTML = `<div class="overlay" id="ov"><div class="sheet" role="dialog" aria-modal="true">${html}</div></div>`;
+  const close = () => { root.innerHTML = ''; };
+  $('#ov').addEventListener('mousedown', e => { if (e.target.id === 'ov') close(); });
+  onMount && onMount(close);
+  const first = root.querySelector('input,textarea,select,button'); first && first.focus();
+  return close;
+}
+function ask(msg, okLabel, fn) {
+  modal(`<h3>${esc(msg)}</h3><div class="foot"><button class="btn ghost" type="button" id="no">Huỷ</button><button class="btn solid" style="background:var(--danger);border-color:var(--danger)" type="button" id="yes">${esc(okLabel)}</button></div>`,
+    close => { $('#no').onclick = close; $('#yes').onclick = () => { close(); fn(); }; });
+}
+function toast(msg) {
+  const r = $('#toastRoot'); r.innerHTML = `<div class="toast" role="status">${esc(msg)}</div>`;
+  clearTimeout(toast.t); toast.t = setTimeout(() => r.innerHTML = '', 2200);
+}
+function deckDialog() {
+  modal(`<h3>Tạo bộ thẻ</h3><form id="df"><div class="field"><label for="dn">Tên bộ thẻ</label><input class="input" id="dn" required placeholder="VD: IELTS Speaking"></div>
+    <div class="foot"><button class="btn ghost" type="button" id="dc">Huỷ</button><button class="btn solid" type="submit">Tạo</button></div></form>`, close => {
+    $('#dc').onclick = close;
+    $('#df').onsubmit = e => { e.preventDefault(); const d = createDeck($('#dn').value); close(); S.addDeck = d.id; toast('Đã tạo bộ ' + d.name); render(); };
+  });
+}
+function editDialog(id) {
+  const c = S.cards[id]; if (!c) return;
+  modal(`<h3>Sửa thẻ</h3><form class="form" id="ef">
+      <div class="grid2"><div class="field"><label for="eDeck">Bộ thẻ</label><select class="input" id="eDeck">${deckOptions(c.deck)}</select></div>
+      <div class="field"><label for="eTag">Nhãn</label><input class="input" id="eTag" value="${esc(c.tag)}"></div></div>
+      <div class="field"><label for="eF">Mặt trước</label><textarea class="input" id="eF">${esc(c.front)}</textarea></div>
+      <div class="field"><label for="eB">Mặt sau</label><textarea class="input" id="eB" style="min-height:200px">${esc(c.back)}</textarea></div>
+      <p class="note">${c.type === 0 ? 'Thẻ mới, chưa học.' : `Đã ôn ${c.reps} lần · quên ${c.lapses || 0} lần${c.type === 2 ? ` · khoảng cách ${fmtDays(c.ivl)} · độ dễ ${Math.round(c.ease * 100)}% · ngày ôn tới ${fmtDate(c.dueDay)}` : ''}`}</p>
+      <div class="foot" style="margin-top:0">
+        <button class="btn danger" type="button" id="eDel">Xoá</button>
+        <button class="btn ghost" type="button" id="eReset" ${c.type === 0 ? 'disabled' : ''}>Đặt lại thành thẻ mới</button>
+        <span class="spacer"></span>
+        <button class="btn ghost" type="button" id="eC">Huỷ</button>
+        <button class="btn solid" type="submit">Lưu</button>
+      </div></form>`, close => {
+    $('#eC').onclick = close;
+    $('#ef').onsubmit = e => {
+      e.preventDefault();
+      const n = { ...S.cards[id], deck: $('#eDeck').value, tag: $('#eTag').value.trim(), front: $('#eF').value.trim(), back: $('#eB').value.trim(), mod: Date.now() };
+      if (!n.front) { toast('Mặt trước đang trống'); return; }
+      S.cards[id] = n; Store.write('cards', n); close(); toast('Đã lưu'); render();
+    };
+    $('#eReset').onclick = () => {
+      const n = { ...S.cards[id], type: 0, ivl: 0, ease: 0, left: 0, reps: 0, lapses: 0, mod: Date.now() }; delete n.due; delete n.dueDay;
+      S.cards[id] = n; Store.write('cards', n); close(); toast('Thẻ đã thành thẻ mới'); render();
+    };
+    $('#eDel').onclick = () => { close(); ask('Xoá thẻ này?', 'Xoá', () => {
+      delete S.cards[id]; Store.del('cards', id); if (S.cur === id) { S.cur = null; S.showAns = false; } if (S.undo?.card.id === id) S.undo = null; toast('Đã xoá thẻ'); render(); }); };
+  });
+}
+function limitsDialog(deckId) {
+  const d = S.decks[deckId]; if (!d) return;
+  const cf = conf(d), td = deckToday(d);
+  const num = (id, label, val, hint, step = 1) => `<div class="field"><label for="${id}">${label}</label><input class="input" id="${id}" type="number" inputmode="decimal" step="${step}" min="0" value="${val}">${hint ? `<span class="hint">${hint}</span>` : ''}</div>`;
+  modal(`<h3>Tuỳ chọn: ${esc(d.name)}</h3><form class="form" id="lf">
+    <div class="field"><label for="lName">Tên bộ thẻ</label><input class="input" id="lName" value="${esc(d.name)}"></div>
+    <div class="grid2">
+      ${num('lNew', 'Thẻ mới mỗi ngày', cf.newPerDay, `Hôm nay đã học ${td.newDone} thẻ mới`)}
+      ${num('lRev', 'Lượt ôn tối đa mỗi ngày', cf.revPerDay, `Hôm nay đã ôn ${td.revDone} thẻ`)}
+    </div>
+    <details class="adv"><summary>Thời gian học lại (nâng cao)</summary><div class="grid2">
+      <div class="field"><label for="lSteps">Các bước học (phút)</label><input class="input" id="lSteps" value="${cf.learnSteps.join(' ')}"><span class="hint">Mặc định Anki: 1 10</span></div>
+      <div class="field"><label for="lRel">Các bước học lại khi quên (phút)</label><input class="input" id="lRel" value="${cf.relearnSteps.join(' ')}"><span class="hint">Mặc định: 10</span></div>
+      ${num('lGrad', 'Khoảng cách khi thuộc (ngày)', cf.gradIvl, 'Bấm Good ở bước cuối')}
+      ${num('lEasy', 'Khoảng cách khi bấm Easy (ngày)', cf.easyIvl, 'Thẻ mới bấm Easy')}
+      ${num('lEase', 'Độ dễ ban đầu (%)', Math.round(cf.startEase * 100), 'Mặc định 250%')}
+      ${num('lBonus', 'Thưởng Easy (%)', Math.round(cf.easyBonus * 100), 'Mặc định 130%')}
+      ${num('lHard', 'Hệ số Hard (%)', Math.round(cf.hardMult * 100), 'Mặc định 120%')}
+      ${num('lMod', 'Hệ số khoảng cách (%)', Math.round(cf.ivlMod * 100), 'Mặc định 100%')}
+      ${num('lLapse', 'Khoảng cách mới sau khi quên (%)', Math.round(cf.lapseMult * 100), 'Mặc định 0% (về 1 ngày)')}
+      ${num('lMax', 'Khoảng cách tối đa (ngày)', cf.maxIvl, '')}
+    </div></details>
+    <div class="foot" style="margin-top:0">
+      <button class="btn danger" type="button" id="lDel">Xoá bộ thẻ</button>
+      <button class="btn ghost" type="button" id="lDef">Mặc định</button>
+      <span class="spacer"></span>
+      <button class="btn ghost" type="button" id="lC">Huỷ</button>
+      <button class="btn solid" type="submit">Lưu</button>
+    </div></form>`, close => {
+    $('#lC').onclick = close;
+    $('#lDef').onclick = () => { d.conf = {}; Store.write('decks', d); close(); toast('Đã khôi phục mặc định'); render(); };
+    $('#lDel').onclick = () => { close(); const n = cardsOf(d.id).length; ask(`Xoá bộ "${d.name}" và ${n} thẻ trong đó?`, 'Xoá bộ thẻ', () => {
+      cardsOf(d.id).forEach(c => { delete S.cards[c.id]; Store.del('cards', c.id); });
+      delete S.decks[d.id]; Store.del('decks', d.id); S.undo = null; toast('Đã xoá bộ thẻ'); go('decks'); }); };
+    $('#lf').onsubmit = e => {
+      e.preventDefault();
+      const steps = v => v.split(/[\s,]+/).map(Number).filter(x => x > 0);
+      const v = id => Number($(id).value);
+      const pos = (x, dft) => Number.isFinite(x) && x >= 0 ? x : dft;
+      d.name = $('#lName').value.trim() || d.name;
+      d.conf = {
+        newPerDay: Math.round(pos(v('#lNew'), DEF.newPerDay)), revPerDay: Math.round(pos(v('#lRev'), DEF.revPerDay)),
+        learnSteps: steps($('#lSteps').value), relearnSteps: steps($('#lRel').value),
+        gradIvl: Math.max(1, Math.round(pos(v('#lGrad'), 1))), easyIvl: Math.max(1, Math.round(pos(v('#lEasy'), 4))),
+        startEase: Math.max(1.3, pos(v('#lEase'), 250) / 100), easyBonus: Math.max(1, pos(v('#lBonus'), 130) / 100),
+        hardMult: Math.max(1, pos(v('#lHard'), 120) / 100), ivlMod: Math.max(0.1, pos(v('#lMod'), 100) / 100),
+        lapseMult: Math.min(1, pos(v('#lLapse'), 0) / 100), maxIvl: Math.max(1, Math.round(pos(v('#lMax'), 36500))), minIvl: 1
+      };
+      Store.write('decks', d); close(); toast('Đã lưu tuỳ chọn'); render();
+    };
+  });
+}
+function helpDialog() {
+  modal(`<h3>Cách tính lịch ôn</h3>
+    <div style="display:grid;gap:10px;line-height:1.6">
+      <p style="margin:0"><strong>Thẻ mới</strong> đi qua các bước học (mặc định 1 phút rồi 10 phút). Bấm <strong>Good</strong> ở bước cuối thì thẻ "tốt nghiệp" và quay lại sau 1 ngày; bấm <strong>Easy</strong> thì sau 4 ngày.</p>
+      <p style="margin:0"><strong>Thẻ ôn tập</strong> nhân khoảng cách với độ dễ (bắt đầu 250%):</p>
+      <ul style="margin:0;padding-left:20px">
+        <li><strong>Again</strong>: quên. Độ dễ −20%, thẻ học lại sau 10 phút rồi bắt đầu lại từ 1 ngày.</li>
+        <li><strong>Hard</strong>: nhớ khó. Khoảng cách × 1.2, độ dễ −15%.</li>
+        <li><strong>Good</strong>: nhớ. Khoảng cách × độ dễ (VD 1d → 3d → 7d → 18d…).</li>
+        <li><strong>Easy</strong>: rất dễ. Khoảng cách × độ dễ × 1.3, độ dễ +15%.</li>
+      </ul>
+      <p style="margin:0" class="muted">Số trên nút là thời gian thẻ sẽ quay lại. Màu số đếm: xanh dương = mới, đỏ = đang học, xanh lá = đến hạn ôn. Ngày mới bắt đầu lúc 4 giờ sáng. Phím tắt: Space hiện đáp án, 1–4 chọn mức.</p>
+    </div>
+    <div class="foot"><button class="btn solid" type="button" id="hc">Đã hiểu</button></div>`, close => { $('#hc').onclick = close; });
+}
+
+/* ============ import / export ============ */
+async function exportData() {
+  $('#menu').hidden = true;
+  const json = JSON.stringify({ app: 'nholau', version: 1, exported: new Date().toISOString(), decks: S.decks, cards: S.cards }, null, 1);
+  const filename = `nholau-${new Date().toISOString().slice(0, 10)}.json`;
+  try {
+    const dl = window.claude?.use ? await window.claude.use('downloads') : null;
+    if (dl) { await dl.save({ filename, data: json }); return; }
+  } catch (e) { if (e && e.code && e.code !== 'unavailable') { toast('Đã huỷ lưu file'); return; } }
+  try {
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' })); a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+  } catch (e) {}
+  modal(`<h3>Dữ liệu xuất</h3><p class="note">Nếu file không tự tải về, chép đoạn dưới đây và lưu lại.</p><textarea class="input" id="exTxt" style="min-height:220px;font-size:.8rem" readonly>${esc(json)}</textarea>
+    <div class="foot"><button class="btn ghost" type="button" id="exC">Đóng</button><button class="btn solid" type="button" id="exCopy">Sao chép</button></div>`, close => {
+    $('#exC').onclick = close;
+    $('#exCopy').onclick = () => { navigator.clipboard.writeText(json).then(() => toast('Đã sao chép'), () => { $('#exTxt').select(); }); };
+  });
+}
+function importFile(file) {
+  const r = new FileReader();
+  r.onload = () => {
+    const text = String(r.result || '');
+    try {
+      const j = JSON.parse(text);
+      if (!j || typeof j.decks !== 'object' || typeof j.cards !== 'object') throw new Error('bad');
+      let n = 0;
+      Object.values(j.decks).forEach(d => { if (d && d.id && d.name) { S.decks[d.id] = d; Store.write('decks', d); } });
+      Object.values(j.cards).forEach(c => { if (c && c.id && S.decks[c.deck]) { S.cards[c.id] = c; Store.write('cards', c); n++; } });
+      toast(`Đã nhập ${n} thẻ`); go('decks');
+    } catch (e) {
+      const rows = parseBulk(text);
+      if (!rows.length) { toast('File không đúng định dạng JSON hoặc Tab/|'); return; }
+      const d = createDeck(file.name.replace(/\.[^.]+$/, ''));
+      rows.forEach(([f, b]) => { const c = makeCard(d.id, f, b, ''); S.cards[c.id] = c; Store.write('cards', c); });
+      toast(`Đã tạo bộ "${d.name}" với ${rows.length} thẻ`); go('decks');
+    }
+  };
+  r.readAsText(file);
+}
+
+/* ============ sample deck ============ */
+function addSample() {
+  const d = createDeck('Mẫu · IELTS Speaking');
+  const data = [
+    ['Part 2', 'Describe a traditional product from your country and explain why it is popular.',
+`I'd like to talk about tương Bần, a fermented soybean sauce from Bần Yên Nhân in Hưng Yên province, near my hometown.
+
+It's made from glutinous rice, soybeans, salt and water, and it's left to ferment in the sun for months. When I was a kid, my neighbours had rows of clay jars in the yard, and you could smell the sauce from the street.
+
+There are a few reasons why it's so popular. First, it's incredibly versatile: a dipping sauce for boiled vegetables, morning glory, steamed beef or boiled chicken. People also use it for cooking, for example to braise fish or pork, which makes the dish much tastier. Second, it's cheap and lasts a long time, so almost every family in the North keeps a bottle in the kitchen. And finally, it's a popular gift. Whenever I go back to Hà Nội after visiting my hometown, I often bring a few bottles for my friends, and they always look forward to it.
+
+For me the taste of tương Bần is the taste of home. It reminds me of simple family meals with my grandmother.`],
+    ['Part 1', 'Do you prefer cooking at home or eating out?',
+`I'd say cooking at home, mainly because it's healthier and I know exactly what goes into the food. Eating out is a nice treat at the weekend, though, especially when I want to try something I can't make myself.`],
+    ['Part 3', 'Why do some traditional products disappear over time?',
+`I think the main reason is that younger people move to cities and don't learn the skills from their parents. Mass-produced goods are also cheaper and more convenient. Unless local governments support craft villages, for example through tourism or branding, many of these products may vanish.`],
+    ['Vocabulary', 'versatile (adj.)',
+`đa năng, dùng được nhiều cách
+Ví dụ: Fish sauce is incredibly versatile. You can use it for dipping or cooking.`]
+  ];
+  data.forEach(([tag, f, b], i) => { const c = makeCard(d.id, f, b, tag); c.created = Date.now() + i; S.cards[c.id] = c; Store.write('cards', c); });
+  toast('Đã thêm bộ thẻ mẫu'); render();
+}
+
+/* ============ misc ============ */
+function zoom(dir) {
+  let s = 1.55; try { s = parseFloat(localStorage.getItem('nholau.size')) || 1.55; } catch (e) {}
+  s = Math.min(2.6, Math.max(1, s + dir * 0.15));
+  document.documentElement.style.setProperty('--card-size', s + 'rem');
+  try { localStorage.setItem('nholau.size', s); } catch (e) {}
+}
+
+$('#brand').onclick = () => go('decks');
+$('#menuBtn').onclick = e => { const m = $('#menu'); m.hidden = !m.hidden; e.currentTarget.setAttribute('aria-expanded', String(!m.hidden)); };
+document.addEventListener('click', e => { if (!e.target.closest('#menu') && !e.target.closest('#menuBtn')) { $('#menu').hidden = true; $('#menuBtn').setAttribute('aria-expanded', 'false'); } });
+document.querySelectorAll('#menu [data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
+$('#mExport').onclick = exportData;
+$('#mImport').onclick = () => { $('#menu').hidden = true; $('#fileIn').click(); };
+$('#mHelp').onclick = () => { $('#menu').hidden = true; helpDialog(); };
+$('#fileIn').onchange = e => { const f = e.target.files[0]; if (f) importFile(f); e.target.value = ''; };
+document.addEventListener('keydown', e => {
+  if (S.view !== 'study' || $('#modalRoot').innerHTML || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+  if (!S.cur) return;
+  if (!S.showAns && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); S.showAns = true; render(); }
+  else if (S.showAns && /^[1-4]$/.test(e.key)) { e.preventDefault(); answer(+e.key); }
+  else if (S.showAns && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); answer(3); }
+  else if (e.key.toLowerCase() === 'z' && (e.ctrlKey || e.metaKey)) undo();
+});
+document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
+
+zoom(0);
+Store.loadLocal();
+setSync('Đang kết nối…');
+render();
+Store.connect().then(() => { if (Store.mode !== 'remote' && !/Không/.test($('#syncNote').textContent)) setSync(); });
+</script>
+
+</body></html>
