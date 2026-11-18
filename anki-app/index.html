@@ -158,6 +158,17 @@ nav.tabs svg{width:26px;height:26px}
 .mtools .btn{min-height:32px;padding:2px 10px;font-size:.88rem}
 .progress{height:8px;border-radius:99px;background:var(--line);overflow:hidden;margin:12px 0 6px}
 .progress i{display:block;height:100%;background:var(--accent);width:0;transition:width .2s}
+.type-in{display:block;max-width:440px;margin:22px auto 0;text-align:center;font-size:calc(var(--card-size)*.75);padding:12px 14px}
+.tans{max-width:560px;margin:0 auto 22px;font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:calc(var(--card-size)*.72);display:grid;gap:6px;text-align:center}
+.tline{display:flex;gap:10px;justify-content:center;align-items:baseline;flex-wrap:wrap;overflow-wrap:anywhere}
+.tlab{font-family:var(--f-body);font-size:.7em;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.tans .ok{color:var(--rev)}
+.tans .bad{color:var(--learn);text-decoration:line-through;background:color-mix(in srgb,var(--learn) 14%,transparent)}
+.tans .miss{color:var(--muted)}
+.tans .need{color:var(--fg);background:color-mix(in srgb,var(--rev) 22%,transparent);font-weight:700}
+.verdict{font-family:var(--f-body);font-size:.8em}
+.verdict.v-ok{color:var(--rev)}.verdict.v-bad{color:var(--learn)}
+.check{display:flex;gap:8px;align-items:center;font-weight:500}
 .muted{color:var(--muted)}
 .note{font-size:.85rem;color:var(--muted);margin-top:10px}
 @media (prefers-reduced-motion:no-preference){.card{animation:pop .18s ease-out}@keyframes pop{from{transform:translateY(4px);opacity:.6}to{transform:none;opacity:1}}}
@@ -218,7 +229,7 @@ function fmtMin(m) { if (m < 1) return '<1m'; if (m < 60) return Math.round(m) +
 
 /* ============ state ============ */
 const S = { decks: {}, cards: {}, view: 'decks', deckId: null, cur: null, showAns: false, undo: null,
-  browseQ: '', browseDeck: 'all', importKeepSched: true, played: null, browseLimit: 60, addDeck: null, addTag: '', addMode: 'one', timer: null };
+  browseQ: '', browseDeck: 'all', importKeepSched: true, played: null, typed: '', addType: false, bulkType: false, browseLimit: 60, addDeck: null, addTag: '', addMode: 'one', timer: null };
 
 function conf(deck) { return { ...DEF, ...(deck?.conf || {}) }; }
 function cardsOf(deckId) { return Object.values(S.cards).filter(c => c.deck === deckId); }
@@ -335,19 +346,23 @@ function b64(u8) { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += 
 function unb64(s) { const b = atob(s), u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; }
 const Media = {
   urls: new Map(),
-  async put(blob, name = '') {
+  async put(blob, name = '', onProgress) {
     const type = (blob.type && blob.type !== 'application/octet-stream') ? blob.type.split(';')[0] : typeOf(name);
-    if (blob.size > 20 * 1024 * 1024) throw new Error('File lớn hơn 20 MB');
     if (Store.remote) {
-      if (Store.assets && ASSET_TYPES.includes(type)) {
-        const r = await Store.assets.upload(blob, { type });
-        return 'a:' + r.id;
+      // images / mp4 / webm up to 20 MB go to the asset store; anything else, or larger, is chunked into the account database
+      if (Store.assets && ASSET_TYPES.includes(type) && blob.size <= 20 * 1024 * 1024) {
+        try { const r = await Store.assets.upload(blob, { type }); return 'a:' + r.id; }
+        catch (e) { if (e && e.code === 'quota_or_state') throw new Error('Kho file của app đã đầy'); console.warn('asset upload failed, using database', e); }
       }
-      if (blob.size > 4 * 1024 * 1024) throw new Error('File âm thanh lớn hơn 4 MB');
       const id = newId(), data = b64(new Uint8Array(await blob.arrayBuffer()));
       const n = Math.ceil(data.length / CHUNK) || 1;
       const base = `${Store.base}/mchunks/${id}_`;
-      for (let i = 0; i < n; i++) { const d = data.slice(i * CHUNK, (i + 1) * CHUNK); await Store.slot(() => Store.remote.doc(base + i).set({ d })); }
+      let sent = 0;
+      await Promise.all(Array.from({ length: n }, (_, i) => Store.slot(async () => {
+        try { await Store.remote.doc(base + i).set({ d: data.slice(i * CHUNK, (i + 1) * CHUNK) }); }
+        catch (e) { throw new Error(e && e.code === 'quota_exceeded' ? 'Dung lượng lưu trữ tài khoản đã đầy' : 'Lỗi lưu file'); }
+        sent++; onProgress && onProgress(sent / n);
+      })));
       await Store.slot(() => Store.remote.doc(`${Store.base}/media/${id}`).set({ id, type, name: name.slice(0, 150), size: blob.size, chunks: n, created: Date.now() }));
       IDB.put('m:' + id, new Blob([blob], { type })).catch(() => {});
       return 'm:' + id;
@@ -405,7 +420,7 @@ async function attachMedia(textarea, kind) {
 async function insertMedia(textarea, file, kind) {
   toast('Đang tải lên…');
   try {
-    const ref = await Media.put(file, file.name || '');
+    const ref = await Media.put(file, file.name || '', f => toast(`Đang tải lên… ${Math.round(f * 100)}%`));
     const tok = kind === 'img' ? `[img:${ref}]` : `[sound:${ref}]`;
     const s = textarea.selectionStart ?? textarea.value.length, e = textarea.selectionEnd ?? s;
     textarea.value = textarea.value.slice(0, s) + tok + textarea.value.slice(e);
@@ -520,7 +535,7 @@ function answer(ease) {
   const n = fuzz(schedule(c, ease, conf(deck), Date.now()));
   S.cards[c.id] = n;
   Store.write('cards', n); Store.write('decks', deck);
-  S.cur = null; S.showAns = false;
+  S.cur = null; S.showAns = false; S.typed = '';
   render();
 }
 function undo() {
@@ -528,12 +543,40 @@ function undo() {
   const deck = S.decks[u.deckId]; if (!deck) return;
   S.cards[u.card.id] = u.card; deck.today = u.today;
   Store.write('cards', u.card); Store.write('decks', deck);
-  S.cur = u.card.id; S.showAns = false; S.undo = null;
+  S.cur = u.card.id; S.showAns = false; S.undo = null; S.typed = '';
   toast('Đã hoàn tác'); render();
 }
-function makeCard(deck, front, back, tag) {
+/* ---------- type-in answer (like Anki {{type:Field}}) ---------- */
+const normAns = s => String(s || '').replace(/\[(img|sound):[^\]]+\]/g, '').replace(/\s+/g, ' ').trim();
+function typeDiff(typed, want) {
+  // char-level LCS, case-insensitive; returns html for the typed line and the correct line
+  const a = [...typed], b = [...want], A = typed.toLowerCase(), B = want.toLowerCase();
+  const al = [...A], bl = [...B], n = a.length, m = b.length;
+  const L = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) L[i][j] = al[i] === bl[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+  let i = 0, j = 0, top = '', bot = '';
+  const span = (cls, ch) => `<span class="${cls}">${esc(ch)}</span>`;
+  while (i < n || j < m) {
+    if (i < n && j < m && al[i] === bl[j]) { top += span('ok', a[i]); bot += span('ok', b[j]); i++; j++; }
+    else if (j < m && (i >= n || L[i][j + 1] >= L[i + 1][j])) { top += span('miss', '-'); bot += span('need', b[j]); j++; }
+    else { top += span('bad', a[i]); i++; }
+  }
+  return { top, bot, correct: A === B };
+}
+function typeBlock(card) {
+  const want = normAns(card.typeAns), typed = normAns(S.typed);
+  if (!typed) return `<div class="tans"><div class="tline"><span class="tlab">Đáp án</span><span>${esc(want)}</span></div></div>`;
+  const d = typeDiff(typed, want);
+  if (d.correct) return `<div class="tans good"><div class="tline"><span class="tlab">Bạn gõ</span><span>${d.top}</span></div><strong class="verdict v-ok">Chính xác ✓</strong></div>`;
+  return `<div class="tans"><div class="tline"><span class="tlab">Bạn gõ</span><span>${d.top}</span></div><div class="tline"><span class="tlab">Đáp án</span><span>${d.bot}</span></div><strong class="verdict v-bad">Chưa đúng</strong></div>`;
+}
+function reveal() {
+  const inp = $('#typeIn'); if (inp) S.typed = inp.value;
+  S.showAns = true; render();
+}
+function makeCard(deck, front, back, tag, typeAns) {
   const now = Date.now();
-  return { id: newId(), deck, front: front.trim(), back: back.trim(), tag: (tag || '').trim(), type: 0, ivl: 0, ease: 0, reps: 0, lapses: 0, left: 0, created: now + Math.random(), mod: now };
+  return { id: newId(), deck, front: front.trim(), back: back.trim(), tag: (tag || '').trim(), typeAns: (typeAns || '').trim(), type: 0, ivl: 0, ease: 0, reps: 0, lapses: 0, left: 0, created: now + Math.random(), mod: now };
 }
 function createDeck(name) {
   const d = { id: newId(), name: name.trim() || 'Bộ thẻ mới', conf: {}, created: Date.now() };
@@ -649,10 +692,18 @@ function renderStudy() {
       <article class="card" aria-live="polite">
         ${card.tag ? `<span class="pill">${esc(card.tag)}</span>` : ''}
         <div class="q">${rich(card.front)}</div>
-        ${S.showAns ? `<hr id="answer"><div class="a">${rich(card.back)}</div>` : ''}
+        ${card.typeAns && !S.showAns ? `<input class="input type-in" id="typeIn" type="text" placeholder="Gõ đáp án rồi nhấn Enter" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" value="${esc(S.typed)}" aria-label="Gõ đáp án">` : ''}
+        ${S.showAns ? `<hr id="answer">${card.typeAns ? typeBlock(card) : ''}<div class="a">${rich(card.back)}</div>` : ''}
       </article>`;
+    const ti = $('#typeIn');
+    if (ti) {
+      ti.oninput = () => S.typed = ti.value;
+      ti.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); reveal(); } };
+      if (S.played !== card.id + ':false:' + card.reps) setTimeout(() => ti.focus({ preventScroll: true }), 50);
+    }
     const key = card.id + ':' + S.showAns + ':' + card.reps;
     const fresh = S.played !== key; S.played = key;
+    if (fresh && !S.showAns) S.typed = '';
     if (fresh) stopAudio();
     hydrate($('.card', view), fresh ? $(S.showAns ? '.card .a' : '.card .q', view) : null);
   }
@@ -670,7 +721,7 @@ function renderBottom() {
     if (!card) { root.innerHTML = ''; return; }
     if (!S.showAns) {
       root.innerHTML = `<div class="answer-bar gut"><div class="wrap"><button class="btn solid show-btn" type="button" id="showAns">Hiện đáp án</button></div></div>`;
-      $('#showAns').onclick = () => { S.showAns = true; render(); };
+      $('#showAns').onclick = reveal;
     } else {
       const cf = conf(deck);
       const names = ['Again', 'Hard', 'Good', 'Easy'];
@@ -717,11 +768,14 @@ function renderAdd() {
       ${S.addMode === 'one' ? `
         <div class="field"><label for="aFront">Mặt trước (câu hỏi)</label><textarea class="input" id="aFront" data-media required placeholder="VD: Describe a traditional product from your country and explain why it is popular."></textarea>${mediaTools('aFront')}</div>
         <div class="field"><label for="aBack">Mặt sau (đáp án)</label><textarea class="input" id="aBack" data-media style="min-height:180px" placeholder="Câu trả lời mẫu, giải nghĩa, ví dụ…"></textarea>${mediaTools('aBack')}<span class="hint">Có thể dán ảnh trực tiếp vào ô. Ảnh và âm thanh hiện trong ô dưới dạng [img:…] và [sound:…].</span></div>
+        <div class="field"><label class="check"><input type="checkbox" id="aTypeOn" ${S.addType ? 'checked' : ''}> Thẻ gõ đáp án (khi học phải gõ, app sẽ chấm từng chữ)</label>
+          <input class="input" id="aType" placeholder="Đáp án cần gõ. Để trống thì dùng mặt sau" ${S.addType ? '' : 'hidden'}></div>
         <div><button class="btn solid" type="submit">Thêm thẻ</button></div>
       ` : `
         <div class="field"><label for="aBulk">Mỗi dòng một thẻ: <code>mặt trước | mặt sau</code></label>
           <textarea class="input" id="aBulk" style="min-height:220px" placeholder="ubiquitous | có mặt ở khắp nơi&#10;versatile | đa năng, dùng được nhiều cách&#10;Describe your hometown. | My hometown is…"></textarea>
           <span class="hint">Cũng nhận dữ liệu xuất từ Anki dạng Tab (Notes in Plain Text). Viết &lt;br&gt; để xuống dòng trong thẻ.</span></div>
+        <label class="check"><input type="checkbox" id="aBulkType" ${S.bulkType ? 'checked' : ''}> Tất cả là thẻ gõ đáp án (đáp án = mặt sau)</label>
         <div><button class="btn solid" type="submit">Nhập các thẻ</button> <span class="muted" id="bulkCount"></span></div>
       `}
     </form>`;
@@ -729,6 +783,8 @@ function renderAdd() {
   wireMediaTools(view);
   $('#aDeck').onchange = e => S.addDeck = e.target.value;
   $('#aTag').oninput = e => S.addTag = e.target.value;
+  if ($('#aTypeOn')) $('#aTypeOn').onchange = e => { S.addType = e.target.checked; $('#aType').hidden = !S.addType; };
+  if ($('#aBulkType')) $('#aBulkType').onchange = e => S.bulkType = e.target.checked;
   if (S.addMode === 'bulk') {
     const upd = () => { $('#bulkCount').textContent = parseBulk($('#aBulk').value).length + ' thẻ'; };
     $('#aBulk').oninput = upd; upd();
@@ -739,13 +795,15 @@ function renderAdd() {
     if (S.addMode === 'one') {
       const f = $('#aFront').value, b = $('#aBack').value;
       if (!f.trim()) { $('#aFront').focus(); toast('Mặt trước đang trống'); return; }
-      const c = makeCard(deck, f, b, tag); S.cards[c.id] = c; Store.write('cards', c);
-      $('#aFront').value = ''; $('#aBack').value = ''; $('#aFront').focus();
+      const ta = S.addType ? ($('#aType').value.trim() || normAns(b)) : '';
+      if (S.addType && !ta) { $('#aType').focus(); toast('Nhập đáp án cần gõ hoặc điền mặt sau'); return; }
+      const c = makeCard(deck, f, b, tag, ta); S.cards[c.id] = c; Store.write('cards', c);
+      $('#aFront').value = ''; $('#aBack').value = ''; if ($('#aType')) $('#aType').value = ''; $('#aFront').focus();
       toast('Đã thêm thẻ vào ' + S.decks[deck].name); renderBottom();
     } else {
       const rows = parseBulk($('#aBulk').value);
       if (!rows.length) { toast('Chưa có dòng nào hợp lệ'); return; }
-      rows.forEach(([f, b]) => { const c = makeCard(deck, f, b, tag); S.cards[c.id] = c; Store.write('cards', c); });
+      rows.forEach(([f, b]) => { const c = makeCard(deck, f, b, tag, S.bulkType ? normAns(b) : ''); S.cards[c.id] = c; Store.write('cards', c); });
       $('#aBulk').value = ''; $('#bulkCount').textContent = '';
       toast(`Đã thêm ${rows.length} thẻ`); renderBottom();
     }
@@ -786,7 +844,7 @@ function renderBrowse() {
       <button class="item" type="button" data-edit="${c.id}">
         <span class="f">${esc(plain(c.front)) || '[ảnh]'}</span>
         <span class="state ${cls} ${due ? 'due' : ''}">${lab}</span>
-        <span class="meta"><span>${esc(d ? d.name : '—')}</span>${c.tag ? `<span>${esc(c.tag)}</span>` : ''}${c.type === 2 ? `<span>ngày ôn: ${fmtDate(c.dueDay)}</span><span>độ dễ ${Math.round(c.ease * 100)}%</span>` : ''}${c.lapses ? `<span>quên ${c.lapses} lần</span>` : ''}</span>
+        <span class="meta"><span>${esc(d ? d.name : '—')}</span>${c.tag ? `<span>${esc(c.tag)}</span>` : ''}${c.typeAns ? '<span>gõ đáp án</span>' : ''}${c.type === 2 ? `<span>ngày ôn: ${fmtDate(c.dueDay)}</span><span>độ dễ ${Math.round(c.ease * 100)}%</span>` : ''}${c.lapses ? `<span>quên ${c.lapses} lần</span>` : ''}</span>
       </button>`; }).join('')}</div>
       ${list.length > shown.length ? `<button class="btn ghost more" type="button" id="more">Xem thêm</button>` : ''}`
     : `<div class="empty"><p>${Object.keys(S.cards).length ? 'Không có thẻ nào khớp.' : 'Chưa có thẻ nào.'}</p></div>`}`;
@@ -830,6 +888,7 @@ function editDialog(id) {
       <div class="field"><label for="eTag">Nhãn</label><input class="input" id="eTag" value="${esc(c.tag)}"></div></div>
       <div class="field"><label for="eF">Mặt trước</label><textarea class="input" id="eF" data-media>${esc(c.front)}</textarea>${mediaTools('eF')}</div>
       <div class="field"><label for="eB">Mặt sau</label><textarea class="input" id="eB" data-media style="min-height:200px">${esc(c.back)}</textarea>${mediaTools('eB')}</div>
+      <div class="field"><label for="eT">Đáp án cần gõ</label><input class="input" id="eT" value="${esc(c.typeAns || '')}" placeholder="Để trống nếu không phải thẻ gõ đáp án"></div>
       <p class="note">${c.type === 0 ? 'Thẻ mới, chưa học.' : `Đã ôn ${c.reps} lần · quên ${c.lapses || 0} lần${c.type === 2 ? ` · khoảng cách ${fmtDays(c.ivl)} · độ dễ ${Math.round(c.ease * 100)}% · ngày ôn tới ${fmtDate(c.dueDay)}` : ''}`}</p>
       <div class="foot" style="margin-top:0">
         <button class="btn danger" type="button" id="eDel">Xoá</button>
@@ -841,7 +900,7 @@ function editDialog(id) {
     $('#eC').onclick = close;
     $('#ef').onsubmit = e => {
       e.preventDefault();
-      const n = { ...S.cards[id], deck: $('#eDeck').value, tag: $('#eTag').value.trim(), front: $('#eF').value.trim(), back: $('#eB').value.trim(), mod: Date.now() };
+      const n = { ...S.cards[id], deck: $('#eDeck').value, tag: $('#eTag').value.trim(), front: $('#eF').value.trim(), back: $('#eB').value.trim(), typeAns: $('#eT').value.trim(), mod: Date.now() };
       if (!n.front) { toast('Mặt trước đang trống'); return; }
       S.cards[id] = n; Store.write('cards', n); close(); toast('Đã lưu'); render();
     };
@@ -916,7 +975,7 @@ function helpDialog() {
         <li><strong>Good</strong>: nhớ. Khoảng cách × độ dễ (VD 1d → 3d → 7d → 18d…).</li>
         <li><strong>Easy</strong>: rất dễ. Khoảng cách × độ dễ × 1.3, độ dễ +15%.</li>
       </ul>
-      <p style="margin:0" class="muted">Số trên nút là thời gian thẻ sẽ quay lại. Màu số đếm: xanh dương = mới, đỏ = đang học, xanh lá = đến hạn ôn. Ngày mới bắt đầu lúc 4 giờ sáng. Phím tắt: Space hiện đáp án, 1–4 chọn mức. Âm thanh ở mặt trước tự phát khi hiện câu hỏi, âm thanh ở mặt sau tự phát khi hiện đáp án.</p>
+      <p style="margin:0" class="muted">Số trên nút là thời gian thẻ sẽ quay lại. Màu số đếm: xanh dương = mới, đỏ = đang học, xanh lá = đến hạn ôn. Ngày mới bắt đầu lúc 4 giờ sáng. Thẻ gõ đáp án: gõ rồi nhấn Enter, chữ đúng màu xanh, chữ sai gạch đỏ, chữ thiếu tô xanh ở dòng đáp án. Phím tắt: Space hiện đáp án, 1–4 chọn mức. Âm thanh ở mặt trước tự phát khi hiện câu hỏi, âm thanh ở mặt sau tự phát khi hiện đáp án.</p>
     </div>
     <div class="foot"><button class="btn solid" type="button" id="hc">Đã hiểu</button></div>`, close => { $('#hc').onclick = close; });
 }
@@ -1090,22 +1149,28 @@ async function importApkg(file) {
     cards.forEach(([cid, nid, did, odid, ord, type, queue, due, ivl, factor, reps, lapses, left], idx) => {
       const n = notes[nid]; const m = n && models[n.mid]; if (!m) return;
       const fv = {}; m.flds.forEach((name, i) => fv[name] = n.flds[i] ?? '');
-      let front, back;
+      let front, back, typeAns = '';
       if (m.cloze) {
         const cf = tplFields((m.tmpls[0] || {}).q).filter(x => fv[x] != null);
         const main = cf[0] || m.flds[0];
         front = htmlToText(clozeText(fv[main], ord + 1, 'q'), mediaRef);
+        if (/{{type:cloze:/.test((m.tmpls[0] || {}).q)) {
+          const ans = []; String(fv[main]).replace(/{{c(\d+)::([\s\S]*?)(?:::[\s\S]*?)?}}/g, (_, c, a) => { if (+c === ord + 1) ans.push(a); });
+          typeAns = normAns(htmlToText(ans.join(', '), () => null));
+        }
         const extra = m.flds.filter(x => x !== main && fv[x] && tplFields((m.tmpls[0] || {}).a).includes(x));
         back = [htmlToText(clozeText(fv[main], ord + 1, 'a'), mediaRef), ...extra.map(x => htmlToText(fv[x], mediaRef))].filter(Boolean).join('\n\n');
       } else {
         const tp = m.tmpls[ord] || m.tmpls[0] || { q: '', a: '' };
-        let qf = tplFields(tp.q).filter(x => fv[x] != null); if (!qf.length) qf = [m.flds[0]];
+        const tref = ((tp.q.match(/{{type:([^}]+)}}/) || [])[1] || '').trim();
+        if (tref && fv[tref] != null) typeAns = normAns(htmlToText(fv[tref], () => null));
+        let qf = tplFields(tp.q.replace(/{{type:[^}]+}}/g, '')).filter(x => fv[x] != null); if (!qf.length) qf = [m.flds[0]];
         let af = tplFields(tp.a).filter(x => fv[x] != null && !qf.includes(x)); if (!tp.a) af = m.flds.filter(x => !qf.includes(x));
         front = qf.map(x => htmlToText(fv[x], mediaRef)).filter(Boolean).join('\n');
         back = af.map(x => htmlToText(fv[x], mediaRef)).filter(Boolean).join('\n\n');
       }
       if (!front && !back) return;
-      const c = makeCard(getDeck(odid || did), front || '(trống)', back, '');
+      const c = makeCard(getDeck(odid || did), front || '(trống)', back, '', typeAns);
       c.created = now + idx;
       if (keepSched && type > 0 && queue >= -1) {
         c.reps = reps || 0; c.lapses = lapses || 0; c.ease = factor ? factor / 1000 : DEF.startEase; c.ivl = ivl > 0 ? ivl : 0;
@@ -1212,7 +1277,7 @@ $('#fileIn').onchange = e => { const f = e.target.files[0]; if (f) importFile(f)
 document.addEventListener('keydown', e => {
   if (S.view !== 'study' || $('#modalRoot').innerHTML || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
   if (!S.cur) return;
-  if (!S.showAns && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); S.showAns = true; render(); }
+  if (!S.showAns && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); reveal(); }
   else if (S.showAns && /^[1-4]$/.test(e.key)) { e.preventDefault(); answer(+e.key); }
   else if (S.showAns && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); answer(3); }
   else if (e.key.toLowerCase() === 'z' && (e.ctrlKey || e.metaKey)) undo();

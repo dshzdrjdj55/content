@@ -10,4 +10,7 @@ Mọi thông số chỉnh được trong "Giới hạn" của từng bộ thẻ.
 ## Ảnh và âm thanh
 - Thẻ dùng ký hiệu như Anki: `[img:…]` và `[sound:…]`. Nút "+ Ảnh" / "+ Âm thanh" dưới ô nhập, hoặc dán ảnh trực tiếp.
 - Menu → "Nhập bộ thẻ Anki (.apkg)": đọc cả định dạng cũ (collection.anki2/anki21) và mới (anki21b, nén zstd), kèm media và (tuỳ chọn) tiến độ học.
-- Trên Artifact: ảnh lưu vào kho file của artifact, âm thanh lưu trong cơ sở dữ liệu tài khoản (chia nhỏ). Bản `index.html` mở trực tiếp lưu media trong IndexedDB của trình duyệt.
+- Trên Artifact: ảnh ≤ 20 MB lưu vào kho file của artifact; âm thanh và file lớn hơn lưu chia nhỏ trong cơ sở dữ liệu tài khoản, app không đặt giới hạn dung lượng.
+
+## Thẻ gõ đáp án
+- Tích "Thẻ gõ đáp án" khi thêm thẻ, hoặc nhập .apkg có {{type:...}}. Khi học gõ đáp án rồi Enter, app so từng chữ. Bản `index.html` mở trực tiếp lưu media trong IndexedDB của trình duyệt.
