@@ -85,6 +85,7 @@ main{padding-block:14px 120px}
 .study-bar .tools{display:flex;gap:8px;flex-wrap:wrap}
 .card{background:var(--surface);border-radius:6px;padding:40px clamp(18px,5vw,40px) 44px;min-height:280px}
 .card .pill{display:table;margin:0 auto 18px;background:var(--pill-bg);color:var(--pill-fg);border-radius:999px;padding:4px 18px;font-size:calc(var(--card-size)*.68)}
+.card .q .snd,.card .a .snd{font-size:1rem}
 .card .q{font-family:var(--f-display);font-weight:700;font-size:var(--card-size);line-height:1.5;text-align:center;white-space:pre-wrap;overflow-wrap:anywhere;text-wrap:balance;margin:0}
 .card hr{border:0;border-top:1px solid var(--line);margin:28px 0}
 .card .a{font-size:calc(var(--card-size)*.82);line-height:1.75;white-space:pre-wrap;overflow-wrap:anywhere;margin:0}
@@ -148,6 +149,15 @@ nav.tabs svg{width:26px;height:26px}
 .sheet .foot{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;margin-top:18px}
 .sheet .foot .spacer{flex:1}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(92px + env(safe-area-inset-bottom,0px));z-index:60;background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:8px;font-weight:500;box-shadow:var(--shadow);max-width:calc(100% - 32px)}
+.card img.media{display:block;max-width:100%;max-height:60vh;height:auto;margin:12px auto;border-radius:6px}
+.card img.media:not([src]){min-height:60px;min-width:60px;background:var(--line)}
+.snd{display:inline-grid;place-items:center;width:44px;height:44px;border-radius:50%;border:2px solid var(--accent);background:var(--bg);color:var(--accent);cursor:pointer;vertical-align:middle;margin:4px}
+.snd svg{width:20px;height:20px}
+.snd.playing{background:var(--accent);color:var(--accent-fg)}
+.mtools{display:flex;gap:8px;flex-wrap:wrap}
+.mtools .btn{min-height:32px;padding:2px 10px;font-size:.88rem}
+.progress{height:8px;border-radius:99px;background:var(--line);overflow:hidden;margin:12px 0 6px}
+.progress i{display:block;height:100%;background:var(--accent);width:0;transition:width .2s}
 .muted{color:var(--muted)}
 .note{font-size:.85rem;color:var(--muted);margin-top:10px}
 @media (prefers-reduced-motion:no-preference){.card{animation:pop .18s ease-out}@keyframes pop{from{transform:translateY(4px);opacity:.6}to{transform:none;opacity:1}}}
@@ -165,13 +175,13 @@ nav.tabs svg{width:26px;height:26px}
       <button type="button" data-go="add">Thêm thẻ mới</button>
       <button type="button" data-go="browse">Tất cả các thẻ</button>
       <button type="button" id="mExport">Xuất dữ liệu (JSON)</button>
-      <button type="button" id="mImport">Nhập dữ liệu (JSON / Anki .txt)</button>
+      <button type="button" id="mImport">Nhập bộ thẻ Anki (.apkg) / JSON</button>
       <button type="button" id="mHelp">Cách tính lịch ôn</button>
       <div class="sync" id="syncNote">Đang kết nối…</div>
     </div>
   </div>
 </header>
-<input type="file" id="fileIn" accept=".json,.txt,.tsv,.csv,application/json,text/plain" hidden>
+<input type="file" id="fileIn" accept=".apkg,.colpkg,.json,.txt,.tsv,.csv,application/json,text/plain" hidden>
 
 <main class="gut"><div class="wrap" id="view"></div></main>
 <div id="bottom"></div>
@@ -208,7 +218,7 @@ function fmtMin(m) { if (m < 1) return '<1m'; if (m < 60) return Math.round(m) +
 
 /* ============ state ============ */
 const S = { decks: {}, cards: {}, view: 'decks', deckId: null, cur: null, showAns: false, undo: null,
-  browseQ: '', browseDeck: 'all', browseLimit: 60, addDeck: null, addTag: '', addMode: 'one', timer: null };
+  browseQ: '', browseDeck: 'all', importKeepSched: true, played: null, browseLimit: 60, addDeck: null, addTag: '', addMode: 'one', timer: null };
 
 function conf(deck) { return { ...DEF, ...(deck?.conf || {}) }; }
 function cardsOf(deckId) { return Object.values(S.cards).filter(c => c.deck === deckId); }
@@ -222,11 +232,38 @@ function deckList() { return Object.values(S.decks).sort((a, b) => a.name.locale
 /* ============ storage: Claude account (db) with browser fallback ============ */
 const LS_KEY = 'nholau.v1';
 const Store = {
-  remote: null, base: null, chains: {}, mode: 'local',
+  remote: null, base: null, chains: {}, mode: 'local', quiet: false, q: [], active: 0, assets: null,
+  async loadAll(path) {
+    const out = {};
+    let last = null;
+    for (let guard = 0; guard < 200; guard++) {
+      let q = this.remote.collection(path);
+      if (last) q = q.where('id', '>', last);
+      const snap = await q.limit(1000).get();
+      snap.docs.forEach(d => { if (d.exists) out[d.id] = clone(d.data()); });
+      if (snap.size < 1000) break;
+      last = snap.docs[snap.docs.length - 1].id;
+    }
+    return out;
+  },
+  slot(fn) { return new Promise((res, rej) => { this.q.push({ fn, res, rej }); this.pump(); }); },
+  pump() {
+    while (this.active < 6 && this.q.length) {
+      const { fn, res, rej } = this.q.shift(); this.active++;
+      Promise.resolve().then(fn).then(res, rej).finally(() => { this.active--; this.pump(); });
+    }
+  },
+  enqueue(path, fn) {
+    const p = (this.chains[path] || Promise.resolve()).then(() => this.slot(fn));
+    this.chains[path] = p.catch(() => {});
+    return p;
+  },
+  async flush() { await Promise.all(Object.values(this.chains)); },
+  pending() { return this.active + this.q.length; },
   loadLocal() {
     try { const j = JSON.parse(localStorage.getItem(LS_KEY) || 'null'); if (j) { S.decks = j.decks || {}; S.cards = j.cards || {}; } } catch (e) {}
   },
-  saveLocal() { try { localStorage.setItem(LS_KEY, JSON.stringify({ decks: S.decks, cards: S.cards })); } catch (e) {} },
+  saveLocal() { if (this.quiet) return; try { localStorage.setItem(LS_KEY, JSON.stringify({ decks: S.decks, cards: S.cards })); } catch (e) {} },
   async connect() {
     if (!window.claude || typeof window.claude.use !== 'function') { setSync(); return; }
     try {
@@ -238,13 +275,12 @@ const Store = {
       setSync('Đang tải dữ liệu từ tài khoản…');
       let timedOut = false;
       const timer = setTimeout(() => { timedOut = true; setSync('Không tải được dữ liệu tài khoản. Đang dùng bản lưu trên máy.'); }, 10000);
-      const [ds, cs] = await Promise.all([db.collection(this.base + '/decks').get(), db.collection(this.base + '/cards').get()]);
+      this.remote = db;
+      const [decks, cards] = await Promise.all([this.loadAll(this.base + '/decks'), this.loadAll(this.base + '/cards')]);
       clearTimeout(timer);
-      if (timedOut) return;
-      this.remote = db; this.mode = 'remote';
-      const decks = {}, cards = {};
-      ds.docs.forEach(d => { if (d.exists) decks[d.id] = clone(d.data()); });
-      cs.docs.forEach(d => { if (d.exists) cards[d.id] = clone(d.data()); });
+      if (timedOut) { this.remote = null; return; }
+      this.mode = 'remote';
+      try { this.assets = await window.claude.use('assets'); } catch (e) { this.assets = null; }
       if (!Object.keys(decks).length && Object.keys(S.decks).length) {
         Object.values(S.decks).forEach(d => this.write('decks', d));
         Object.values(S.cards).forEach(c => this.write('cards', c));
@@ -256,21 +292,136 @@ const Store = {
     this.saveLocal();
     if (!this.remote) return;
     const path = `${this.base}/${kind}/${obj.id}`, data = clone(obj);
-    this.chains[path] = (this.chains[path] || Promise.resolve())
-      .then(() => this.remote.doc(path).set(data))
-      .catch(e => { console.warn(e); toast('Chưa lưu được lên tài khoản, sẽ giữ trên máy.'); });
+    this.enqueue(path, () => this.remote.doc(path).set(data))
+      .catch(e => { console.warn(e); toast(e && e.code === 'quota_exceeded' ? 'Bộ nhớ tài khoản đã đầy, thẻ chỉ được giữ trên máy này.' : 'Chưa lưu được lên tài khoản, sẽ giữ trên máy.'); });
   },
   del(kind, id) {
     this.saveLocal();
     if (!this.remote) return;
     const path = `${this.base}/${kind}/${id}`;
-    this.chains[path] = (this.chains[path] || Promise.resolve()).then(() => this.remote.doc(path).delete()).catch(e => console.warn(e));
+    this.enqueue(path, () => this.remote.doc(path).delete()).catch(e => console.warn(e));
   }
 };
 function setSync(msg) {
   $('#syncNote').textContent = msg || (Store.mode === 'remote'
     ? 'Đã đồng bộ với tài khoản Claude của bạn (riêng tư, dùng được trên mọi thiết bị).'
     : 'Dữ liệu lưu trên trình duyệt này. Hãy xuất JSON để sao lưu.');
+}
+
+/* ============ media: images & sound ============
+   Card text holds tokens like Anki: [img:REF] and [sound:REF]
+   REF a:<id>  file in the artifact's asset store (images, mp4/webm)
+       m:<id>  file kept in the account database as base64 chunks (audio, other types)
+       l:<id>  file kept only in this browser (IndexedDB) */
+const IDB = {
+  p: null,
+  open() {
+    if (!this.p) this.p = new Promise((res, rej) => {
+      const r = indexedDB.open('nholau-media', 1);
+      r.onupgradeneeded = () => r.result.createObjectStore('m');
+      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+    });
+    return this.p;
+  },
+  async get(k) { try { const db = await this.open(); return await new Promise((res, rej) => { const t = db.transaction('m').objectStore('m').get(k); t.onsuccess = () => res(t.result); t.onerror = () => rej(t.error); }); } catch (e) { return undefined; } },
+  async put(k, v) { const db = await this.open(); return new Promise((res, rej) => { const t = db.transaction('m', 'readwrite'); t.objectStore('m').put(v, k); t.oncomplete = () => res(); t.onerror = () => rej(t.error); }); }
+};
+const ASSET_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'video/mp4', 'video/webm'];
+const EXT_TYPES = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml', bmp: 'image/bmp',
+  mp3: 'audio/mpeg', m4a: 'audio/mp4', aac: 'audio/aac', ogg: 'audio/ogg', oga: 'audio/ogg', opus: 'audio/ogg', wav: 'audio/wav', flac: 'audio/flac', webm: 'video/webm', mp4: 'video/mp4' };
+const typeOf = (name, fallback) => EXT_TYPES[(name.split('.').pop() || '').toLowerCase()] || fallback || 'application/octet-stream';
+const CHUNK = 180000; // base64 chars per db document (limit is 256 KiB)
+function b64(u8) { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); }
+function unb64(s) { const b = atob(s), u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; }
+const Media = {
+  urls: new Map(),
+  async put(blob, name = '') {
+    const type = (blob.type && blob.type !== 'application/octet-stream') ? blob.type.split(';')[0] : typeOf(name);
+    if (blob.size > 20 * 1024 * 1024) throw new Error('File lớn hơn 20 MB');
+    if (Store.remote) {
+      if (Store.assets && ASSET_TYPES.includes(type)) {
+        const r = await Store.assets.upload(blob, { type });
+        return 'a:' + r.id;
+      }
+      if (blob.size > 4 * 1024 * 1024) throw new Error('File âm thanh lớn hơn 4 MB');
+      const id = newId(), data = b64(new Uint8Array(await blob.arrayBuffer()));
+      const n = Math.ceil(data.length / CHUNK) || 1;
+      const base = `${Store.base}/mchunks/${id}_`;
+      for (let i = 0; i < n; i++) { const d = data.slice(i * CHUNK, (i + 1) * CHUNK); await Store.slot(() => Store.remote.doc(base + i).set({ d })); }
+      await Store.slot(() => Store.remote.doc(`${Store.base}/media/${id}`).set({ id, type, name: name.slice(0, 150), size: blob.size, chunks: n, created: Date.now() }));
+      IDB.put('m:' + id, new Blob([blob], { type })).catch(() => {});
+      return 'm:' + id;
+    }
+    const id = 'l:' + newId();
+    await IDB.put(id, new Blob([blob], { type }));
+    return id;
+  },
+  url(ref) {
+    if (/^(https?:|data:|blob:|\/)/.test(ref)) return Promise.resolve(ref);
+    if (ref.startsWith('a:')) return Promise.resolve('/_blob/' + ref.slice(2));
+    if (!this.urls.has(ref)) this.urls.set(ref, (async () => {
+      let blob = await IDB.get(ref);
+      if (!blob && ref.startsWith('m:') && Store.remote) {
+        const id = ref.slice(2);
+        const meta = await Store.remote.doc(`${Store.base}/media/${id}`).get();
+        if (!meta.exists) return null;
+        const m = meta.data(); const parts = [];
+        for (let i = 0; i < m.chunks; i++) { const c = await Store.remote.doc(`${Store.base}/mchunks/${id}_${i}`).get(); parts.push(c.exists ? c.data().d : ''); }
+        blob = new Blob([unb64(parts.join(''))], { type: m.type });
+        IDB.put(ref, blob).catch(() => {});
+      }
+      return blob ? URL.createObjectURL(blob) : null;
+    })().catch(() => null));
+    return this.urls.get(ref);
+  }
+};
+const ICON_PLAY = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 9v6h4l5 4V5L7 9H3zm13.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4zM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6z"/></svg>';
+function rich(text) {
+  return esc(text)
+    .replace(/\[img:([^\]\s]+)\]/g, (_, r) => `<img class="media" data-ref="${r}" alt="">`)
+    .replace(/\[sound:([^\]]+)\]/g, (_, r) => `<button class="snd" type="button" data-ref="${r}" aria-label="Phát âm thanh">${ICON_PLAY}</button>`);
+}
+const plain = t => String(t || '').replace(/\[img:[^\]]+\]/g, '[ảnh]').replace(/\[sound:[^\]]+\]/g, '[âm thanh]').replace(/\s+/g, ' ').trim();
+let curAudio = null;
+function stopAudio() { if (curAudio) { curAudio.pause(); curAudio = null; } document.querySelectorAll('.snd.playing').forEach(b => b.classList.remove('playing')); }
+async function playRef(btn) {
+  stopAudio();
+  const url = await Media.url(btn.dataset.ref);
+  if (!url) { toast('Không tìm thấy file âm thanh'); return; }
+  const a = new Audio(url); curAudio = a; btn.classList.add('playing');
+  return new Promise(res => { const end = () => { btn.classList.remove('playing'); res(); }; a.onended = end; a.onerror = end; a.play().catch(end); });
+}
+async function hydrate(root, autoplayIn) {
+  root.querySelectorAll('img[data-ref]').forEach(async img => { const u = await Media.url(img.dataset.ref); if (u) img.src = u; else img.alt = '(không tìm thấy ảnh)'; });
+  root.querySelectorAll('.snd').forEach(b => b.onclick = () => playRef(b));
+  if (autoplayIn) for (const b of autoplayIn.querySelectorAll('.snd')) { if (!b.isConnected) break; await playRef(b); }
+}
+async function attachMedia(textarea, kind) {
+  const inp = document.createElement('input'); inp.type = 'file';
+  inp.accept = kind === 'img' ? 'image/*' : 'audio/*,video/mp4,video/webm,.mp3,.m4a,.ogg,.wav';
+  inp.onchange = async () => { const f = inp.files[0]; if (f) await insertMedia(textarea, f, kind); };
+  inp.click();
+}
+async function insertMedia(textarea, file, kind) {
+  toast('Đang tải lên…');
+  try {
+    const ref = await Media.put(file, file.name || '');
+    const tok = kind === 'img' ? `[img:${ref}]` : `[sound:${ref}]`;
+    const s = textarea.selectionStart ?? textarea.value.length, e = textarea.selectionEnd ?? s;
+    textarea.value = textarea.value.slice(0, s) + tok + textarea.value.slice(e);
+    textarea.dispatchEvent(new Event('input'));
+    toast(kind === 'img' ? 'Đã chèn ảnh' : 'Đã chèn âm thanh');
+  } catch (err) { console.warn(err); toast('Không tải lên được: ' + (err.message || err.code || 'lỗi')); }
+}
+function mediaTools(id) {
+  return `<div class="mtools"><button class="btn ghost" type="button" data-mt="img" data-for="${id}">+ Ảnh</button><button class="btn ghost" type="button" data-mt="snd" data-for="${id}">+ Âm thanh</button></div>`;
+}
+function wireMediaTools(root) {
+  root.querySelectorAll('[data-mt]').forEach(b => b.onclick = () => attachMedia($('#' + b.dataset.for), b.dataset.mt));
+  root.querySelectorAll('textarea[data-media]').forEach(t => t.addEventListener('paste', e => {
+    const f = [...(e.clipboardData?.files || [])].find(f => /^(image|audio)\//.test(f.type));
+    if (f) { e.preventDefault(); insertMedia(t, f, f.type.startsWith('image') ? 'img' : 'snd'); }
+  }));
 }
 
 /* ============ scheduler (Anki SM-2 style) ============
@@ -419,10 +570,12 @@ function renderDecks() {
         <div class="row-actions" style="justify-content:center">
           <button class="btn solid" type="button" id="newDeck">Tạo bộ thẻ</button>
           <button class="btn" type="button" id="sample">Dùng bộ thẻ mẫu (IELTS Speaking)</button>
+          <button class="btn" type="button" id="impA">Nhập file Anki (.apkg)</button>
         </div>
       </div>`;
     $('#newDeck').onclick = deckDialog;
     $('#sample').onclick = addSample;
+    $('#impA').onclick = importDialog;
     return;
   }
   view.innerHTML = `
@@ -495,9 +648,13 @@ function renderStudy() {
     view.innerHTML = bar + `
       <article class="card" aria-live="polite">
         ${card.tag ? `<span class="pill">${esc(card.tag)}</span>` : ''}
-        <p class="q">${esc(card.front)}</p>
-        ${S.showAns ? `<hr id="answer"><p class="a">${esc(card.back)}</p>` : ''}
+        <div class="q">${rich(card.front)}</div>
+        ${S.showAns ? `<hr id="answer"><div class="a">${rich(card.back)}</div>` : ''}
       </article>`;
+    const key = card.id + ':' + S.showAns + ':' + card.reps;
+    const fresh = S.played !== key; S.played = key;
+    if (fresh) stopAudio();
+    hydrate($('.card', view), fresh ? $(S.showAns ? '.card .a' : '.card .q', view) : null);
   }
   $('#bLimits').onclick = () => limitsDialog(deck.id);
   $('#bPlus').onclick = () => zoom(1);
@@ -558,8 +715,8 @@ function renderAdd() {
         <div class="field"><label for="aTag">Nhãn (tuỳ chọn)</label><input class="input" id="aTag" placeholder="VD: Part 2" value="${esc(S.addTag)}"></div>
       </div>
       ${S.addMode === 'one' ? `
-        <div class="field"><label for="aFront">Mặt trước (câu hỏi)</label><textarea class="input" id="aFront" required placeholder="VD: Describe a traditional product from your country and explain why it is popular."></textarea></div>
-        <div class="field"><label for="aBack">Mặt sau (đáp án)</label><textarea class="input" id="aBack" style="min-height:180px" placeholder="Câu trả lời mẫu, giải nghĩa, ví dụ…"></textarea></div>
+        <div class="field"><label for="aFront">Mặt trước (câu hỏi)</label><textarea class="input" id="aFront" data-media required placeholder="VD: Describe a traditional product from your country and explain why it is popular."></textarea>${mediaTools('aFront')}</div>
+        <div class="field"><label for="aBack">Mặt sau (đáp án)</label><textarea class="input" id="aBack" data-media style="min-height:180px" placeholder="Câu trả lời mẫu, giải nghĩa, ví dụ…"></textarea>${mediaTools('aBack')}<span class="hint">Có thể dán ảnh trực tiếp vào ô. Ảnh và âm thanh hiện trong ô dưới dạng [img:…] và [sound:…].</span></div>
         <div><button class="btn solid" type="submit">Thêm thẻ</button></div>
       ` : `
         <div class="field"><label for="aBulk">Mỗi dòng một thẻ: <code>mặt trước | mặt sau</code></label>
@@ -569,6 +726,7 @@ function renderAdd() {
       `}
     </form>`;
   view.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => { S.addMode = b.dataset.mode; render(); });
+  wireMediaTools(view);
   $('#aDeck').onchange = e => S.addDeck = e.target.value;
   $('#aTag').oninput = e => S.addTag = e.target.value;
   if (S.addMode === 'bulk') {
@@ -626,7 +784,7 @@ function renderBrowse() {
     <p class="sub">${list.length} thẻ</p>
     ${shown.length ? `<div class="list">${shown.map(c => { const [lab, cls, due] = stateLabel(c); const d = S.decks[c.deck]; return `
       <button class="item" type="button" data-edit="${c.id}">
-        <span class="f">${esc(c.front)}</span>
+        <span class="f">${esc(plain(c.front)) || '[ảnh]'}</span>
         <span class="state ${cls} ${due ? 'due' : ''}">${lab}</span>
         <span class="meta"><span>${esc(d ? d.name : '—')}</span>${c.tag ? `<span>${esc(c.tag)}</span>` : ''}${c.type === 2 ? `<span>ngày ôn: ${fmtDate(c.dueDay)}</span><span>độ dễ ${Math.round(c.ease * 100)}%</span>` : ''}${c.lapses ? `<span>quên ${c.lapses} lần</span>` : ''}</span>
       </button>`; }).join('')}</div>
@@ -666,11 +824,12 @@ function deckDialog() {
 }
 function editDialog(id) {
   const c = S.cards[id]; if (!c) return;
+  setTimeout(() => wireMediaTools($('#modalRoot')), 0);
   modal(`<h3>Sửa thẻ</h3><form class="form" id="ef">
       <div class="grid2"><div class="field"><label for="eDeck">Bộ thẻ</label><select class="input" id="eDeck">${deckOptions(c.deck)}</select></div>
       <div class="field"><label for="eTag">Nhãn</label><input class="input" id="eTag" value="${esc(c.tag)}"></div></div>
-      <div class="field"><label for="eF">Mặt trước</label><textarea class="input" id="eF">${esc(c.front)}</textarea></div>
-      <div class="field"><label for="eB">Mặt sau</label><textarea class="input" id="eB" style="min-height:200px">${esc(c.back)}</textarea></div>
+      <div class="field"><label for="eF">Mặt trước</label><textarea class="input" id="eF" data-media>${esc(c.front)}</textarea>${mediaTools('eF')}</div>
+      <div class="field"><label for="eB">Mặt sau</label><textarea class="input" id="eB" data-media style="min-height:200px">${esc(c.back)}</textarea>${mediaTools('eB')}</div>
       <p class="note">${c.type === 0 ? 'Thẻ mới, chưa học.' : `Đã ôn ${c.reps} lần · quên ${c.lapses || 0} lần${c.type === 2 ? ` · khoảng cách ${fmtDays(c.ivl)} · độ dễ ${Math.round(c.ease * 100)}% · ngày ôn tới ${fmtDate(c.dueDay)}` : ''}`}</p>
       <div class="foot" style="margin-top:0">
         <button class="btn danger" type="button" id="eDel">Xoá</button>
@@ -757,7 +916,7 @@ function helpDialog() {
         <li><strong>Good</strong>: nhớ. Khoảng cách × độ dễ (VD 1d → 3d → 7d → 18d…).</li>
         <li><strong>Easy</strong>: rất dễ. Khoảng cách × độ dễ × 1.3, độ dễ +15%.</li>
       </ul>
-      <p style="margin:0" class="muted">Số trên nút là thời gian thẻ sẽ quay lại. Màu số đếm: xanh dương = mới, đỏ = đang học, xanh lá = đến hạn ôn. Ngày mới bắt đầu lúc 4 giờ sáng. Phím tắt: Space hiện đáp án, 1–4 chọn mức.</p>
+      <p style="margin:0" class="muted">Số trên nút là thời gian thẻ sẽ quay lại. Màu số đếm: xanh dương = mới, đỏ = đang học, xanh lá = đến hạn ôn. Ngày mới bắt đầu lúc 4 giờ sáng. Phím tắt: Space hiện đáp án, 1–4 chọn mức. Âm thanh ở mặt trước tự phát khi hiện câu hỏi, âm thanh ở mặt sau tự phát khi hiện đáp án.</p>
     </div>
     <div class="foot"><button class="btn solid" type="button" id="hc">Đã hiểu</button></div>`, close => { $('#hc').onclick = close; });
 }
@@ -781,7 +940,214 @@ async function exportData() {
     $('#exCopy').onclick = () => { navigator.clipboard.writeText(json).then(() => toast('Đã sao chép'), () => { $('#exTxt').select(); }); };
   });
 }
+/* ---------- Anki .apkg / .colpkg ---------- */
+const LIBS = {
+  JSZip: 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js',
+  initSqlJs: 'https://cdn.jsdelivr.net/npm/sql.js@1.8.0/dist/sql-asm-memory-growth.js',
+  fzstd: 'https://cdn.jsdelivr.net/npm/fzstd@0.1.1/umd/index.js'
+};
+function loadLib(name) {
+  if (window[name]) return Promise.resolve(window[name]);
+  return new Promise((res, rej) => {
+    const s = document.createElement('script'); s.src = LIBS[name];
+    s.onload = () => window[name] ? res(window[name]) : rej(new Error('Không tải được ' + name));
+    s.onerror = () => rej(new Error('Không tải được thư viện ' + name + '. Kiểm tra kết nối mạng.'));
+    document.head.appendChild(s);
+  });
+}
+const isZstd = u8 => u8.length > 4 && u8[0] === 0x28 && u8[1] === 0xb5 && u8[2] === 0x2f && u8[3] === 0xfd;
+function pb(buf) { // minimal protobuf reader -> {field: [values]}
+  const out = {}; let i = 0;
+  const varint = () => { let x = 0, s = 0, b; do { b = buf[i++]; x += (b & 127) * 2 ** s; s += 7; } while (b & 128 && i < buf.length); return x; };
+  while (i < buf.length) {
+    const key = varint(), f = Math.floor(key / 8), wt = key & 7; let v;
+    if (wt === 0) v = varint(); else if (wt === 2) { const n = varint(); v = buf.subarray(i, i + n); i += n; }
+    else if (wt === 5) { i += 4; continue; } else if (wt === 1) { i += 8; continue; } else break;
+    (out[f] = out[f] || []).push(v);
+  }
+  return out;
+}
+const utf8 = u8 => new TextDecoder().decode(u8);
+function tplFields(fmt) {
+  const names = []; const re = /{{([^}]+)}}/g; let m;
+  while ((m = re.exec(fmt))) { const t = m[1].trim(); if (/^[#^/!]/.test(t)) continue; const n = t.split(':').pop().trim(); if (n && n !== 'FrontSide' && !names.includes(n)) names.push(n); }
+  return names;
+}
+function clozeText(s, n, side) {
+  return s.replace(/{{c(\d+)::([\s\S]*?)(?:::([\s\S]*?))?}}/g, (_, c, ans, hint) => +c === n ? (side === 'q' ? `[${hint || '...'}]` : `[${ans}]`) : ans);
+}
+function htmlToText(html, mediaRef) {
+  html = String(html || '').replace(/\[sound:([^\]]+)\]/g, (_, f) => { const r = mediaRef(f); return r ? `[sound:${r}]` : ''; });
+  const doc = new DOMParser().parseFromString(`<div>${html}</div>`, 'text/html');
+  let out = '';
+  const walk = n => {
+    if (n.nodeType === 3) { out += n.nodeValue.replace(/\s+/g, ' '); return; }
+    if (n.nodeType !== 1) return;
+    const tag = n.tagName;
+    if (tag === 'SCRIPT' || tag === 'STYLE') return;
+    if (tag === 'BR') { out += '\n'; return; }
+    if (tag === 'IMG') { const r = mediaRef(decodeURIComponent(n.getAttribute('src') || '')); if (r) out += `[img:${r}]`; return; }
+    const block = /^(DIV|P|LI|TR|H\d|UL|OL|TABLE|BLOCKQUOTE)$/.test(tag);
+    if (block && out && !out.endsWith('\n')) out += '\n';
+    if (tag === 'LI') out += '• ';
+    n.childNodes.forEach(walk);
+    if (block && !out.endsWith('\n')) out += '\n';
+  };
+  doc.body.firstChild.childNodes.forEach(walk);
+  return out.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+function progressDialog(title) {
+  let closeFn;
+  modal(`<h3>${esc(title)}</h3><p id="pgMsg" class="muted" style="margin:0">Đang chuẩn bị…</p><div class="progress"><i id="pgBar"></i></div>
+    <div class="foot" id="pgFoot" hidden><button class="btn solid" type="button" id="pgOk">Xong</button></div>`, c => { closeFn = c; $('#ov').onmousedown = null; });
+  return {
+    set(msg, frac) { const m = $('#pgMsg'); if (m) m.textContent = msg; const b = $('#pgBar'); if (b && frac != null) b.style.width = Math.round(frac * 100) + '%'; },
+    done(msg) { this.set(msg, 1); const f = $('#pgFoot'); if (f) { f.hidden = false; $('#pgOk').onclick = () => { closeFn(); go('decks'); }; } }
+  };
+}
+async function importApkg(file) {
+  $('#menu').hidden = true;
+  const pg = progressDialog('Nhập bộ thẻ Anki');
+  try {
+    pg.set('Đang tải thư viện đọc file Anki…', 0.02);
+    const [JSZip, initSqlJs] = await Promise.all([loadLib('JSZip'), loadLib('initSqlJs')]);
+    const zip = await JSZip.loadAsync(file);
+    const unz = async u8 => isZstd(u8) ? (await loadLib('fzstd')).decompress(u8) : u8;
+    const colFile = zip.file('collection.anki21b') || zip.file('collection.anki21') || zip.file('collection.anki2');
+    if (!colFile) throw new Error('Không thấy dữ liệu thẻ trong file. Hãy xuất lại từ Anki dạng "Anki Deck Package (.apkg)".');
+    pg.set('Đang đọc dữ liệu thẻ…', 0.06);
+    const SQL = await initSqlJs();
+    const db = new SQL.Database(await unz(await colFile.async('uint8array')));
+    const rows = (sql) => { try { const r = db.exec(sql)[0]; return r ? r.values : []; } catch (e) { return null; } };
+    const col = rows('SELECT crt, models, decks FROM col')[0];
+    const crt = col[0];
+
+    // media map: index -> filename
+    let mediaNames = {};
+    const mf = zip.file('media');
+    if (mf) {
+      const raw = await unz(await mf.async('uint8array'));
+      try { mediaNames = JSON.parse(utf8(raw)); }
+      catch (e) { (pb(raw)[1] || []).forEach((entry, idx) => { const f = pb(entry); if (f[1]) mediaNames[idx] = utf8(f[1][0]); }); }
+    }
+    const byName = {}; Object.entries(mediaNames).forEach(([k, v]) => byName[v] = k);
+
+    // note types: id -> {cloze, flds:[names], tmpls:{ord:{q,a}}}
+    const models = {};
+    const nt = rows('SELECT id, name, config FROM notetypes');
+    if (nt && nt.length) {
+      nt.forEach(([id]) => models[id] = { cloze: false, flds: [], tmpls: {} });
+      (rows('SELECT ntid, ord, name FROM fields ORDER BY ntid, ord') || []).forEach(([ntid, ord, name]) => { if (models[ntid]) models[ntid].flds[ord] = name; });
+      (rows('SELECT ntid, ord, config FROM templates') || []).forEach(([ntid, ord, cfg]) => {
+        const f = pb(cfg); if (models[ntid]) models[ntid].tmpls[ord] = { q: f[1] ? utf8(f[1][0]) : '', a: f[2] ? utf8(f[2][0]) : '' };
+      });
+      Object.values(models).forEach(m => m.cloze = Object.values(m.tmpls).some(t => /{{cloze:/.test(t.q)));
+    } else {
+      Object.values(JSON.parse(col[1] || '{}')).forEach(m => {
+        models[m.id] = { cloze: m.type === 1, flds: m.flds.map(f => f.name), tmpls: Object.fromEntries(m.tmpls.map(t => [t.ord, { q: t.qfmt, a: t.afmt }])) };
+      });
+    }
+    // decks: id -> name
+    const deckNames = {};
+    const dk = rows('SELECT id, name FROM decks');
+    if (dk && dk.length) dk.forEach(([id, name]) => deckNames[id] = String(name).split('\x1f').join('::'));
+    else Object.values(JSON.parse(col[2] || '{}')).forEach(d => deckNames[d.id] = d.name);
+
+    const notes = {};
+    rows('SELECT id, mid, flds, tags FROM notes').forEach(([id, mid, flds, tags]) => notes[id] = { mid, flds: String(flds).split('\x1f'), tags: String(tags || '').trim() });
+    const cards = rows('SELECT id, nid, did, odid, ord, type, queue, due, ivl, factor, reps, lapses, left FROM cards ORDER BY did, due, ord');
+    db.close();
+    if (!cards.length) throw new Error('File không có thẻ nào.');
+
+    // upload referenced media once
+    const needed = new Set();
+    const scan = s => { String(s).replace(/\[sound:([^\]]+)\]/g, (_, f) => needed.add(f)).replace(/<img[^>]+src=["']?([^"' >]+)/gi, (_, f) => needed.add(decodeURIComponent(f))); };
+    Object.values(notes).forEach(n => n.flds.forEach(scan));
+    const refs = {}; let done = 0, failed = 0;
+    const list = [...needed].filter(f => byName[f] != null);
+    for (const f of list) {
+      pg.set(`Đang tải ảnh / âm thanh ${done + 1}/${list.length}…`, 0.1 + 0.6 * done / Math.max(1, list.length));
+      try {
+        const entry = zip.file(String(byName[f]));
+        if (entry) { const bytes = await unz(await entry.async('uint8array')); refs[f] = await Media.put(new Blob([bytes], { type: typeOf(f) }), f); }
+      } catch (e) { console.warn(f, e); failed++; }
+      done++;
+    }
+    const mediaRef = f => refs[f] || null;
+
+    // build cards
+    pg.set('Đang tạo thẻ…', 0.72);
+    const keepSched = !!S.importKeepSched;
+    const deckMap = {};
+    const getDeck = did => {
+      const name = deckNames[did] || file.name.replace(/\.[^.]+$/, '');
+      if (!deckMap[name]) deckMap[name] = Object.values(S.decks).find(d => d.name === name) || createDeck(name);
+      return deckMap[name].id;
+    };
+    const t = today(), now = Date.now();
+    Store.quiet = true;
+    let made = 0;
+    cards.forEach(([cid, nid, did, odid, ord, type, queue, due, ivl, factor, reps, lapses, left], idx) => {
+      const n = notes[nid]; const m = n && models[n.mid]; if (!m) return;
+      const fv = {}; m.flds.forEach((name, i) => fv[name] = n.flds[i] ?? '');
+      let front, back;
+      if (m.cloze) {
+        const cf = tplFields((m.tmpls[0] || {}).q).filter(x => fv[x] != null);
+        const main = cf[0] || m.flds[0];
+        front = htmlToText(clozeText(fv[main], ord + 1, 'q'), mediaRef);
+        const extra = m.flds.filter(x => x !== main && fv[x] && tplFields((m.tmpls[0] || {}).a).includes(x));
+        back = [htmlToText(clozeText(fv[main], ord + 1, 'a'), mediaRef), ...extra.map(x => htmlToText(fv[x], mediaRef))].filter(Boolean).join('\n\n');
+      } else {
+        const tp = m.tmpls[ord] || m.tmpls[0] || { q: '', a: '' };
+        let qf = tplFields(tp.q).filter(x => fv[x] != null); if (!qf.length) qf = [m.flds[0]];
+        let af = tplFields(tp.a).filter(x => fv[x] != null && !qf.includes(x)); if (!tp.a) af = m.flds.filter(x => !qf.includes(x));
+        front = qf.map(x => htmlToText(fv[x], mediaRef)).filter(Boolean).join('\n');
+        back = af.map(x => htmlToText(fv[x], mediaRef)).filter(Boolean).join('\n\n');
+      }
+      if (!front && !back) return;
+      const c = makeCard(getDeck(odid || did), front || '(trống)', back, '');
+      c.created = now + idx;
+      if (keepSched && type > 0 && queue >= -1) {
+        c.reps = reps || 0; c.lapses = lapses || 0; c.ease = factor ? factor / 1000 : DEF.startEase; c.ivl = ivl > 0 ? ivl : 0;
+        if (type === 2) { c.type = 2; c.ivl = Math.max(1, ivl); c.dueDay = dayOf(crt * 1000 + due * DAY + 3600e3); }
+        else if (type === 1 || type === 3) {
+          c.type = type; c.left = 0;
+          c.due = due > 1e9 ? due * 1000 : now;
+          if (type === 3 && !c.ivl) c.ivl = 1;
+        }
+        if (!c.ease || c.ease < 1.3) c.ease = DEF.startEase;
+      }
+      S.cards[c.id] = c; Store.write('cards', c); made++;
+    });
+    Store.quiet = false; Store.saveLocal();
+    if (Store.remote) {
+      const total = Store.pending();
+      while (Store.pending() > 0) { pg.set(`Đang lưu lên tài khoản… còn ${Store.pending()} thẻ`, 0.75 + 0.25 * (1 - Store.pending() / Math.max(1, total))); await new Promise(r => setTimeout(r, 400)); }
+      await Store.flush();
+    }
+    render();
+    pg.done(`Đã nhập ${made} thẻ vào ${Object.keys(deckMap).length} bộ thẻ, kèm ${Object.keys(refs).length} file ảnh / âm thanh.` + (failed ? ` ${failed} file không tải lên được.` : ''));
+  } catch (e) {
+    Store.quiet = false; Store.saveLocal();
+    console.warn(e); pg.done('Không nhập được: ' + (e.message || e));
+  }
+}
+function importDialog() {
+  $('#menu').hidden = true;
+  modal(`<h3>Nhập dữ liệu</h3>
+    <div style="display:grid;gap:10px;line-height:1.55">
+      <p style="margin:0"><strong>File Anki (.apkg)</strong>: trong Anki chọn bộ thẻ → <em>Export</em> → <em>Anki Deck Package</em>, tích <em>Include media</em>. Ảnh và âm thanh sẽ được nhập theo.</p>
+      <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="keepSch" ${S.importKeepSched ? 'checked' : ''}> Giữ tiến độ học từ Anki (ngày ôn, khoảng cách, độ dễ)</label>
+      <p style="margin:0" class="muted">Cũng nhận file JSON đã xuất từ ứng dụng này, hoặc file văn bản mỗi dòng <code>trước | sau</code> hay dạng Tab.</p>
+    </div>
+    <div class="foot"><button class="btn ghost" type="button" id="imC">Huỷ</button><button class="btn solid" type="button" id="imPick">Chọn file…</button></div>`, close => {
+    $('#imC').onclick = close;
+    $('#keepSch').onchange = e => S.importKeepSched = e.target.checked;
+    $('#imPick').onclick = () => { close(); $('#fileIn').click(); };
+  });
+}
 function importFile(file) {
+  if (/\.(apkg|colpkg|zip)$/i.test(file.name)) { importApkg(file); return; }
   const r = new FileReader();
   r.onload = () => {
     const text = String(r.result || '');
@@ -840,7 +1206,7 @@ $('#menuBtn').onclick = e => { const m = $('#menu'); m.hidden = !m.hidden; e.cur
 document.addEventListener('click', e => { if (!e.target.closest('#menu') && !e.target.closest('#menuBtn')) { $('#menu').hidden = true; $('#menuBtn').setAttribute('aria-expanded', 'false'); } });
 document.querySelectorAll('#menu [data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
 $('#mExport').onclick = exportData;
-$('#mImport').onclick = () => { $('#menu').hidden = true; $('#fileIn').click(); };
+$('#mImport').onclick = importDialog;
 $('#mHelp').onclick = () => { $('#menu').hidden = true; helpDialog(); };
 $('#fileIn').onchange = e => { const f = e.target.files[0]; if (f) importFile(f); e.target.value = ''; };
 document.addEventListener('keydown', e => {
